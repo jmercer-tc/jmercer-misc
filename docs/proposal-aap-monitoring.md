@@ -66,7 +66,9 @@ Implement a daily script that fetches live `allowed_address_pairs` data for all 
 
 The core of the solution is a curated whitelist file — `aap-hosts` — containing the FQDNs of every VM legitimately authorised to use `allowed_address_pairs`. This avoids reliance on VM names or security group names, both of which are arbitrary and team-defined.
 
-Each entry is either a bare FQDN, or an FQDN followed by a CIDR for cases where the VM needs to claim an address range (such as Kubernetes pod CIDRs). Lines beginning with `#` are treated as comments and ignored.
+Each entry is either a bare FQDN, or an FQDN followed by one or more space-separated values — a CIDR, a specific IP, or `0.0.0.0/0`. Lines beginning with `#` are treated as comments and ignored.
+
+`0.0.0.0/0` may be declared in `aap-hosts` where there is an operational justification. The PR approval process is the gate — declaring `0.0.0.0/0` requires an explicit, reviewed, documented entry. Any VM with `0.0.0.0/0` in `allowed_address_pairs` that does not have it declared in `aap-hosts` is an immediate alert.
 
 ```
 # prod_mse_gslb - A10 GSLB pair (serves public VIPs directly)
@@ -82,6 +84,9 @@ lb01b.pte-hostedemail.bra2.tucows.systems
 hub-cp-0.lab-dkoo.cnco2.tucows.systems 10.1.3.0/24
 hub-cp-1.lab-dkoo.cnco2.tucows.systems 10.1.5.0/24
 hub-worker-0.lab-dkoo.cnco2.tucows.systems 10.1.1.0/24
+
+# pte_hostedemail - LB requires 0.0.0.0/0 for <documented reason>
+lb01a.pte-hostedemail.bra2.tucows.systems 0.0.0.0/0
 ```
 
 A companion file — `aap-public-ips` — maintained in the same repository and subject to the same git/PR approval process, contains the list of Tucows-owned public IP ranges. Any `allowed_address_pairs` entry that falls within a range in `aap-public-ips` is considered acceptable for known AAP hosts. This file is maintained separately so that IP range changes (acquisitions, reassignments) can be managed independently of the host whitelist.
@@ -100,14 +105,16 @@ Any VM with `allowed_address_pairs` set that is **not** a known AAP host is imme
 
 For known AAP hosts, the entries in `allowed_address_pairs` are validated against the following rules:
 
+The monitoring script checks whether each entry in `allowed_address_pairs` is accounted for by the VM's `aap-hosts` declaration. The rules are:
+
 | Entry type | Verdict |
 |---|---|
+| IP, CIDR, or `0.0.0.0/0` explicitly declared in `aap-hosts` for this VM | Acceptable |
 | IP or CIDR listed in `aap-public-ips` | Acceptable |
 | RFC1918 IP within the instance's connected subnets | Acceptable |
-| CIDR declared in `aap-hosts` for this FQDN | Acceptable |
-| `0.0.0.0/0` alone or with other IPs | **Alert** |
-| Public IP or CIDR not listed in `aap-public-ips` and not declared in `aap-hosts` | **Alert** |
-| RFC1918 CIDR not declared in `aap-hosts` and not within connected subnets | **Alert** |
+| Any entry not covered by the above | **Alert** |
+
+This means `0.0.0.0/0` is acceptable only when explicitly declared in `aap-hosts` for that VM — which requires a reviewed and approved PR. Any undeclared `0.0.0.0/0` is an immediate alert.
 
 ### Implementation
 
