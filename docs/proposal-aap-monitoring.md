@@ -92,9 +92,7 @@ All changes to `aap-hosts` are made via pull request and require approval before
 
 ### Classification Logic
 
-A VM is considered a **known AAP host** if and only if:
-1. A FQDN in `aap-hosts` resolves to an IP that matches the VM's actual fixed IP as reported by the Shepherd API, and
-2. A reverse DNS lookup of that fixed IP resolves back to the same FQDN (or an equivalent canonical name under the same domain)
+A VM is considered a **known AAP host** if and only if a FQDN in `aap-hosts` resolves via DNS to an IP that matches the VM's fixed IP as returned by the Shepherd/OpenStack API. The Shepherd API is the authoritative source for what a VM's fixed IP actually is — DNS resolution is checked against it, not the other way around.
 
 Any VM with `allowed_address_pairs` set that is **not** a known AAP host is immediately flagged as anomalous, regardless of what IPs are in its `allowed_address_pairs`.
 
