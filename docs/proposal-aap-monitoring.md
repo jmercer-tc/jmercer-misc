@@ -84,6 +84,8 @@ hub-cp-1.lab-dkoo.cnco2.tucows.systems 10.1.5.0/24
 hub-worker-0.lab-dkoo.cnco2.tucows.systems 10.1.1.0/24
 ```
 
+A companion file — `aap-public-ips` — maintained in the same repository and subject to the same git/PR approval process, contains the list of Tucows-owned public IP ranges. Any `allowed_address_pairs` entry that falls within a range in `aap-public-ips` is considered acceptable for known AAP hosts. This file is maintained separately so that IP range changes (acquisitions, reassignments) can be managed independently of the host whitelist.
+
 FQDNs should preferably be under `tucows.systems`, which is managed by OpenStack's DNS service and is therefore authoritative — only properly provisioned VMs will have records there. Other subdomains are permitted, provided the FQDN resolves to the VM's actual fixed IP address.
 
 All changes to `aap-hosts` are made via pull request and require approval before merging. This means every addition, modification, or removal is tracked in git history and subject to review — the PR process serves as the approval and audit mechanism for whitelist changes.
@@ -100,7 +102,7 @@ For known AAP hosts, the entries in `allowed_address_pairs` are validated agains
 
 | Entry type | Verdict |
 |---|---|
-| Tucows public IP ranges (`64.98`, `64.99`, `216.40`, `206.29`) | Acceptable |
+| IP or CIDR listed in `aap-public-ips` | Acceptable |
 | RFC1918 IP within the instance's connected subnets | Acceptable |
 | CIDR declared in `aap-hosts` for this FQDN | Acceptable |
 | `0.0.0.0/0` alone or with other IPs | **Alert** |
@@ -150,6 +152,8 @@ All changes to `aap-hosts` are made via pull request against this repository and
 **Removing an AAP host:** When a VM is decommissioned, its DNS record under `tucows.systems` is removed. The `aap-hosts` entry will fail DNS resolution on the next monitoring run, generating a medium alert. A PR to remove the stale entry should be submitted promptly.
 
 **New use cases:** If a workload type beyond load balancers, ADCs, and K8s nodes requires `allowed_address_pairs`, the team must submit a PR with documented justification before deployment. The PR review process serves as the approval gate.
+
+**Updating public IP ranges:** Changes to Tucows-owned public IP allocations (new ranges, reassignments, retirements) are reflected by submitting a PR against `aap-public-ips`. This is managed independently of `aap-hosts` so that IP range changes do not require re-review of the host whitelist.
 
 ---
 
