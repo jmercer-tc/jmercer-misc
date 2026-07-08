@@ -66,19 +66,27 @@ Implement a daily script that fetches live `allowed_address_pairs` data for all 
 
 The core of the solution is a curated whitelist file — `aap-hosts` — containing the FQDNs of every VM legitimately authorised to use `allowed_address_pairs`. This avoids reliance on VM names or security group names, both of which are arbitrary and team-defined.
 
+Each entry is either a bare FQDN, or an FQDN followed by a CIDR for cases where the VM needs to claim an address range (such as Kubernetes pod CIDRs). Lines beginning with `#` are treated as comments and ignored.
+
 ```
-# prod_mse_gslb - A10 GSLB pair
+# prod_mse_gslb - A10 GSLB pair (serves public VIPs directly)
 adc04a.prod-mse-gslb.cnco2.tucows.systems
 adc04b.prod-mse-gslb.cnco2.tucows.systems
 adc05a.prod-mse-gslb.bra2.tucows.systems
 
-# prod_hostedemail - HA load balancers
-lb01a.prod-hostedemail.bra2.tucows.systems
-lb01b.prod-hostedemail.bra2.tucows.systems
-...
+# pte_hostedemail - HA load balancer pair
+lb01a.pte-hostedemail.bra2.tucows.systems
+lb01b.pte-hostedemail.bra2.tucows.systems
+
+# lab_dkoo - K8s hub cluster nodes (pod CIDR per node)
+hub-cp-0.lab-dkoo.cnco2.tucows.systems 10.1.3.0/24
+hub-cp-1.lab-dkoo.cnco2.tucows.systems 10.1.5.0/24
+hub-worker-0.lab-dkoo.cnco2.tucows.systems 10.1.1.0/24
 ```
 
 FQDNs should preferably be under `tucows.systems`, which is managed by OpenStack's DNS service and is therefore authoritative — only properly provisioned VMs will have records there. Other subdomains are permitted, provided the FQDN resolves to the VM's actual fixed IP address.
+
+All changes to `aap-hosts` are made via pull request and require approval before merging. This means every addition, modification, or removal is tracked in git history and subject to review — the PR process serves as the approval and audit mechanism for whitelist changes.
 
 **Validation:** At runtime, each FQDN is resolved via DNS and matched against the VM's fixed IP from the instance data. If the FQDN does not resolve, or resolves to the wrong IP, the entry is treated as invalid and the VM is flagged — providing natural detection of stale whitelist entries.
 
@@ -96,10 +104,10 @@ For known AAP hosts, the entries in `allowed_address_pairs` are validated agains
 |---|---|
 | Tucows public IP ranges (`64.98`, `64.99`, `216.40`, `206.29`) | Acceptable |
 | RFC1918 IP within the instance's connected subnets | Acceptable |
-| RFC1918 CIDR (pod/service CIDR for K8s nodes) | Acceptable |
-| Single shared VIP within the tenant's address space | Acceptable |
+| CIDR declared in `aap-hosts` for this FQDN | Acceptable |
 | `0.0.0.0/0` alone or with other IPs | **Alert** |
-| Non-Tucows public IP | **Alert** |
+| Non-Tucows public IP not in a declared CIDR | **Alert** |
+| RFC1918 CIDR not declared in `aap-hosts` and not within connected subnets | **Alert** |
 
 ### Implementation
 
@@ -116,9 +124,7 @@ The script would run as a scheduled daily task and perform the following steps:
 
 4. **Baseline comparison** — compare findings against the previous day's results. Alert only on **new** anomalies; suppress known ongoing issues to avoid alert fatigue.
 
-5. **Acknowledged exceptions** — maintain a separate `aap-exceptions` file for known temporary exceptions (e.g., a VM under active remediation), with a mandatory expiry date. Entries past their expiry are treated as unacknowledged.
-
-6. **Output** — generate a daily digest containing:
+5. **Output** — generate a daily digest containing:
    - New anomalies found (high priority)
    - Anomalies resolved since last run
    - Whitelist entries that failed DNS resolution
@@ -139,11 +145,13 @@ The script would run as a scheduled daily task and perform the following steps:
 
 ## Maintenance
 
-**Adding a new AAP host:** When a new load balancer, ADC, or K8s cluster is deployed, the deploying team adds the relevant FQDNs to `aap-hosts` as part of the deployment process. This should be a documented requirement in the runbook for these workload types.
+All changes to `aap-hosts` are made via pull request against this repository and require peer approval before merging. Git history provides a full audit trail of every change, including who requested it, who approved it, and when.
 
-**Removing an AAP host:** When a VM is decommissioned, its DNS record under `tucows.systems` is removed. The `aap-hosts` entry will fail DNS resolution on the next run, generating a medium alert. The stale entry should then be removed from `aap-hosts`.
+**Adding a new AAP host:** When a new load balancer, ADC, or K8s cluster is deployed, the deploying team submits a PR adding the relevant FQDNs (and CIDRs where applicable) to `aap-hosts` before or as part of the deployment. This should be a documented requirement in the runbook for these workload types.
 
-**New use cases:** If a workload type beyond load balancers, ADCs, and K8s nodes requires `allowed_address_pairs`, the team must raise a request to add it to `aap-hosts` with documented justification before deployment.
+**Removing an AAP host:** When a VM is decommissioned, its DNS record under `tucows.systems` is removed. The `aap-hosts` entry will fail DNS resolution on the next monitoring run, generating a medium alert. A PR to remove the stale entry should be submitted promptly.
+
+**New use cases:** If a workload type beyond load balancers, ADCs, and K8s nodes requires `allowed_address_pairs`, the team must submit a PR with documented justification before deployment. The PR review process serves as the approval gate.
 
 ---
 
