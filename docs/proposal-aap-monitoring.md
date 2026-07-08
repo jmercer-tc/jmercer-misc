@@ -16,6 +16,14 @@ An audit of our current OpenStack infrastructure identified **23 instances** wit
 
 ---
 
+## Scope of This Proposal
+
+This proposal describes a **monitoring and alerting** solution. It does not prevent a VM from being configured with non-compliant `allowed_address_pairs` entries — it detects and reports them after the fact. Remediation remains a manual process, initiated by the alert and carried out by the responsible team.
+
+No changes are required to OpenStack, the IaaS platform, or Shepherd. The solution operates entirely outside the infrastructure stack, consuming data via the Shepherd API and DNS.
+
+---
+
 ## Interaction Between `allowed_address_pairs` and Security Group Rules
 
 **`allowed_address_pairs` wins. Security group rules do not apply to traffic using claimed IPs.**
@@ -53,8 +61,6 @@ Several approaches to preventing misuse at the platform level were considered:
 **Per-tenant restriction** is not supported natively by OpenStack. While conceptually desirable, it would require significant custom Neutron development.
 
 The conclusion is that preventive control at the infrastructure level is not practical without disproportionate operational impact. The appropriate response is monitoring and alerting.
-
-It is important to note that the proposed solution is a **monitoring and alerting** system, not an active-blocking one. It does not prevent a VM from being configured with non-compliant `allowed_address_pairs` entries — it detects and reports them. Remediation remains a manual process, initiated by the alert and carried out by the responsible team.
 
 ---
 
