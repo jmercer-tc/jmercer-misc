@@ -16,6 +16,24 @@ An audit of our current OpenStack infrastructure identified **23 instances** wit
 
 ---
 
+## Interaction Between `allowed_address_pairs` and Security Group Rules
+
+Security group rules and `allowed_address_pairs` operate at different layers of OpenStack's networking stack, and they do not simply override each other — their interaction depends on the direction of traffic.
+
+**Security group rules** are evaluated at the port level against the port's own assigned IP address. They control what traffic is allowed to reach or leave the VM based on that IP.
+
+**`allowed_address_pairs`** operates at the anti-spoofing layer (L2/L3, implemented via iptables or OVN depending on the backend). It tells OpenStack which additional IP addresses a port is permitted to claim as source or destination.
+
+The interaction in practice:
+
+- **Ingress to the VM's own IP** — security group rules apply normally. `allowed_address_pairs` does not affect this.
+- **Egress from the VM** — with `allowed_address_pairs = 0.0.0.0/0`, the anti-spoofing filter is entirely disabled. The VM can send traffic claiming to be from any source IP, including IPs belonging to other VMs. Security group egress rules are anchored to the port's own IP and do not follow the claimed source IP.
+- **Traffic using a claimed IP** — when a VM claims a foreign IP via `allowed_address_pairs`, traffic originating from that claimed IP bypasses the security group rules that would normally apply to the legitimate owner of that IP. This is the mechanism by which `0.0.0.0/0` constitutes a security group bypass.
+
+In summary: **`allowed_address_pairs` takes precedence over security group rules for traffic using the claimed IP addresses.** Security group rules remain effective only for traffic associated with the port's own assigned IP. A VM with `0.0.0.0/0` in `allowed_address_pairs` can effectively impersonate any IP on the network and conduct traffic that those IPs' security group rules would otherwise block.
+
+---
+
 ## Legitimate Use Cases
 
 The operational requirement for `allowed_address_pairs` is real but narrow. In our current infrastructure it is confined to three categories:
