@@ -54,6 +54,8 @@ Several approaches to preventing misuse at the platform level were considered:
 
 The conclusion is that preventive control at the infrastructure level is not practical without disproportionate operational impact. The appropriate response is monitoring and alerting.
 
+It is important to note that the proposed solution is a **monitoring and alerting** system, not an active-blocking one. It does not prevent a VM from being configured with non-compliant `allowed_address_pairs` entries — it detects and reports them. Remediation remains a manual process, initiated by the alert and carried out by the responsible team.
+
 ---
 
 ## Proposed Solution: `aap-monitor` — Daily Monitoring Script
