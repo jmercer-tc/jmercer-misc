@@ -106,7 +106,7 @@ For known AAP hosts, the entries in `allowed_address_pairs` are validated agains
 | RFC1918 IP within the instance's connected subnets | Acceptable |
 | CIDR declared in `aap-hosts` for this FQDN | Acceptable |
 | `0.0.0.0/0` alone or with other IPs | **Alert** |
-| Non-Tucows public IP not in a declared CIDR | **Alert** |
+| Public IP or CIDR not listed in `aap-public-ips` and not declared in `aap-hosts` | **Alert** |
 | RFC1918 CIDR not declared in `aap-hosts` and not within connected subnets | **Alert** |
 
 ### Implementation
