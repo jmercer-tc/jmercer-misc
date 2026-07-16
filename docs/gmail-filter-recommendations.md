@@ -176,3 +176,49 @@ Since you read mail through an IMAP client rather than Gmail's web UI day-to-day
 ## How to add these in Gmail
 
 Settings (gear icon) → **See all settings** → **Filters and Blocked Addresses** → **Create a new filter**. Paste the query into the search field, click "Create filter," then check "Apply the label" (creating a new one if needed) and "Skip the Inbox" where noted above.
+
+## Re-running this triage yourself (methodology, for future reference)
+
+Since your Thunderbird setup won't auto-sort anything new that doesn't already match a filter, unlabeled senders will keep accumulating in your inbox over time. You mentioned doing this on a weekly-ish cadence manually — here's the process that produced this doc, condensed so you (or a future assistant session) can repeat it without needing this specific conversation's history.
+
+**1. Find what's new and unlabeled**
+
+The fastest signal is: what's sitting in the inbox that isn't already covered by a filter? A few ways to spot it:
+
+- Sort/scan the inbox by sender and look for repeat senders you don't recognize as already-labeled. Anything appearing 3+ times in a few weeks is worth a filter.
+- In Gmail search, you can approximate "stuff my filters aren't catching" by searching `in:inbox` and eyeballing which threads *don't* already carry one of your category labels (Gmail's search UI doesn't do "has no label" cleanly, so this is manual scanning, not a single magic query).
+- Check whether existing filters are still catching what they should: search `label:secops-nessus` (etc., for any label) and confirm the volume looks consistent with past patterns — a sudden drop can mean a vendor changed their sending address.
+- It's also worth glancing at "All Mail" occasionally for anything that never even reaches "inbox" state but also never got labeled — e.g. mail that arrived filtered by Gmail's own spam heuristics rather than your filters.
+
+**2. Decide: fold into an existing label, or create a new one**
+
+For each recurring/new sender you find, ask in order:
+
+1. Does it clearly belong to one of the existing category prefixes below (same vendor family, same functional purpose)? If so, extend that label's filter query to include the new `from:` address rather than creating a new label. (Edit the filter: Settings → Filters and Blocked Addresses → find it → edit → add `OR from:new-address@example.com` to the existing "Has the words" query.)
+2. If it doesn't fit an existing bucket, is the volume sustained (roughly 2+ per week, or a recognizable recurring pattern) rather than a one-off? If yes, create a new label with a `category-detail` name matching the taxonomy below, plus a new filter recipe (see format used throughout this doc: search query → label → skip-inbox y/n).
+3. If it's low-volume and doesn't fit anywhere, it's fine to leave it unlabeled/in-inbox rather than inventing a label for a single sender — that's what the `misc` label (or manual handling) is for.
+4. For anything actionable (needs a reply/decision, like helpdesk approvals or vendor ticket updates), default to **not** skipping the inbox even if it's from a vendor you'd otherwise auto-file — visibility matters more than tidiness for those.
+
+**3. Current prefix taxonomy (keep new labels consistent with these)**
+
+| Prefix | Used for |
+|---|---|
+| `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, misc/offboarding/domains/maint) |
+| `hr-` | HR/compensation systems (HiBob, Carta) |
+| `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
+| `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
+| `meetings-` | Auto-generated meeting artifacts (Gemini notes) |
+| `billing-` | Vendor invoices |
+| `tools-` | Internal tool notifications (Tempo) |
+| `lists-` | Genuine opt-in mailing lists/working groups (IT-ISAC) |
+| `wavelo-` | Internal Wavelo-specific labels (e.g. `wavelo-concerns`) |
+| `confluence-` | Confluence digest-style notifications |
+
+When in doubt, prefer reusing a prefix over inventing a new one — the whole point of the convention is that IMAP folders in Thunderbird sort together by category, and a proliferation of one-off prefixes defeats that.
+
+**4. After making changes**
+
+- New filters: Settings → Filters and Blocked Addresses → Create a new filter (see "How to add these in Gmail" above).
+- New labels: make sure "Show in IMAP" is checked (Settings → Labels) or Thunderbird won't show the folder.
+- In Thunderbird: right-click the account → **Subscribe...** → **Refresh** to pick up new/renamed/removed folders. Remove any stale ghost folders left behind by a rename/delete.
+- Optionally, jot a one-line note (sender + label + date) somewhere so the next pass has a changelog — this doc doesn't currently track that, but there's nothing stopping you from appending a running "Change log" section here if that'd help.
