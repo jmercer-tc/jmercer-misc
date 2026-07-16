@@ -199,7 +199,20 @@ For each recurring/new sender you find, ask in order:
 3. If it's low-volume and doesn't fit anywhere, it's fine to leave it unlabeled/in-inbox rather than inventing a label for a single sender — that's what the `misc` label (or manual handling) is for.
 4. For anything actionable (needs a reply/decision, like helpdesk approvals or vendor ticket updates), default to **not** skipping the inbox even if it's from a vendor you'd otherwise auto-file — visibility matters more than tidiness for those.
 
-**3. Current prefix taxonomy (keep new labels consistent with these)**
+**3. Check for duplicate/multi-alias streams**
+
+Some senders (vendor newsletters, HR/benefits platforms, security awareness training) will independently send the same message to more than one of your aliases (`@tucows.com`, `@tucowsinc.com`, `@wavelo.com`), because their subscriber list has you on file under multiple addresses. A filter can bundle these into one label, but it can't merge or de-duplicate the sends themselves — that only stops at the source.
+
+To check for this on a given sender:
+
+1. Search `from:sender-domain.com` and scan the `to:` field across results (or just look at recent threads with matching subjects/timestamps a few minutes apart) — repeated subjects landing within the same hour, addressed to different aliases, is the signature of a duplicate stream.
+2. Open one copy of each duplicate and check the footer for an unsubscribe/preferences link — most marketing platforms (Klaviyo, Salesforce Marketing Cloud, etc.) generate a personalized link per recipient copy, and often state outright "This email was sent to: <address>" in the footer. That confirms unsubscribing is per-alias, not global.
+3. Decide which alias to keep (usually your current primary/active one) and unsubscribe the others by opening the specific duplicate copy addressed to the alias you want to drop and using its unsubscribe link — not the copy you're keeping.
+4. Watch for cases where a duplicate isn't actually a personal alias at all — e.g. a copy addressed to a shared/team distro (a greeting naming someone else, or an address like `secops@` rather than `jmercer@`) may be a legacy subscription tied to that shared mailbox rather than to you personally. Don't unsubscribe those unilaterally; flag it for whoever administers that address.
+
+Perkopolis and Infosec Institute both had this pattern as of this review (resolved via manual unsubscribes rather than a filter fix), so treat them as already clean going forward — but it's worth spot-checking any new high-volume sender for the same issue before assuming a single filter has fully captured it.
+
+**4. Current prefix taxonomy (keep new labels consistent with these)**
 
 | Prefix | Used for |
 |---|---|
@@ -216,7 +229,7 @@ For each recurring/new sender you find, ask in order:
 
 When in doubt, prefer reusing a prefix over inventing a new one — the whole point of the convention is that IMAP folders in Thunderbird sort together by category, and a proliferation of one-off prefixes defeats that.
 
-**4. After making changes**
+**5. After making changes**
 
 - New filters: Settings → Filters and Blocked Addresses → Create a new filter (see "How to add these in Gmail" above).
 - New labels: make sure "Show in IMAP" is checked (Settings → Labels) or Thunderbird won't show the folder.
