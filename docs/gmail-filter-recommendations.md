@@ -19,6 +19,7 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 | `hacker1` | `secops-hackerone` | Same, and corrects the truncated vendor name |
 | `github` | `secops-github` | Dev/ops repo notifications tied to your team |
 | `jira` | `secops-jira` | Ticketing notifications |
+| `carta` | `hr-carta` | Tracks employee stock/stock options — groups with `hr-hibob` as a compensation/benefits system |
 | `secops-radware` | *(no change)* | Already fits the convention |
 | `secops-misc` / `secops-offboarding` / `secops-domains` / `secops-maint` | *(no change)* | Already fit |
 
@@ -26,7 +27,6 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 
 | Current name | Note |
 |---|---|
-| `carta` | Sits alongside your vendor-security labels, but Carta is typically cap-table/equity software rather than a security tool — not sure if this is a work security feed or something personal. Let me know what it's tracking and I'll suggest a prefix. |
 | `misc` | Generic catch-all — could rename to `misc-general` for sort order, but not sure it's worth the churn unless you want it grouped near other `misc`-style labels. |
 | `info` | Too generic for me to guess a category confidently. |
 | `concerns` | Same — depends what's actually landing in there. |
