@@ -76,17 +76,15 @@ The bigger review changed the priority order from my first pass:
 
 **1. Helpdesk — split into actionable vs. FYI (highest priority)**
 
-Approval requests need your sign-off, so keep those visible:
-```
-from:(helpdesk@tucows.com OR it@tucows.freshservice.com) subject:"Request for Approval"
-```
-Action: Apply new label `helpdesk-approvals`. Don't skip inbox.
+✅ `helpdesk-approvals` is set up and working correctly (label applied, inbox visibility preserved as intended).
 
 "Resolved" notices are pure FYI:
 ```
 from:helpdesk@tucows.com subject:"Ticket Resolved"
 ```
 Action: Apply new label `helpdesk-resolved`, Skip Inbox.
+
+⚠️ **Not fully working yet:** the label is being applied to matching messages, but Skip Inbox isn't taking effect — all matches still show `INBOX` when checked. Double-check the filter itself has "Skip the Inbox" ticked (Settings → Filters and Blocked Addresses → find this filter → edit), and if it does, re-run the backfill (search the query above, select all matching conversations, apply the label if needed, then click the archive icon to clear them from the inbox).
 
 **2. Newsletters / webinar marketing (second-highest priority — largest pure-noise bucket)**
 
@@ -95,25 +93,13 @@ from:(customerservice@perkopolis.com OR update@grafana.com OR customereducation@
 ```
 Action: Apply new label `newsletters-marketing`, Skip Inbox.
 
-Infosec Institute's training mail is high-volume enough to call out on its own:
-```
-from:training@e.infosecinstitute.com
-```
-Action: Apply new label `newsletters-training`, Skip Inbox.
+✅ `newsletters-training` (Infosec Institute) is set up and working correctly.
 
 Worth calling out: Perkopolis and Infosec Institute mail lands **three times each** — once per alias (`@tucows.com`, `@tucowsinc.com`, `@wavelo.com`). A filter can bundle it out of your inbox, but it won't stop the triplication. If you want that gone entirely, unsubscribing via the link in one or two of those emails (per alias) is the only real fix — a filter can't merge duplicate sends across different recipient addresses.
 
 **3. Automated security reports**
 
-```
-from:no-reply@tucows.com subject:"Github Repository Monitoring Report"
-```
-Action: Apply new label `secops-github-monitoring`, Skip Inbox. (Leave "mark as read" off, so the label still shows unread counts for batch review.)
-
-```
-from:no-reply@securityiq-notifications.com
-```
-Action: Apply new label `secops-phishnotify`, Skip Inbox. This "Reported Emails Summary" goes to a 9-person distro and hits your inbox several times a day.
+✅ `secops-github-monitoring` and ✅ `secops-phishnotify` are both set up and working correctly.
 
 ```
 from:(TAM-Team-noreply@crowdstrike.com OR do-not-reply@crowdstrike.com)
