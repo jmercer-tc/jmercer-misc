@@ -23,14 +23,21 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 | `secops-radware` | *(no change)* | Already fits the convention |
 | `secops-misc` / `secops-offboarding` / `secops-domains` / `secops-maint` | *(no change)* | Already fit |
 
-**Existing labels — unclear category, not renaming without your input**
+**Existing labels — decided**
+
+| Current name | Action | Note |
+|---|---|---|
+| `info` | **Delete** | Empty, no longer needed. |
+| `concerns` | **Rename to `wavelo-concerns`** | |
+| `Archives.2020` | Leave untouched | Dated one-off archive, not a live workflow label. |
+
+**Existing labels — still unclear category, not renaming without your input**
 
 | Current name | Note |
 |---|---|
 | `misc` | Generic catch-all — could rename to `misc-general` for sort order, but not sure it's worth the churn unless you want it grouped near other `misc`-style labels. |
-| `info` | Too generic for me to guess a category confidently. |
-| `concerns` | Same — depends what's actually landing in there. |
-| `Archives.2020` | Looks like a dated one-off archive rather than a live workflow label; probably fine to leave untouched. |
+
+Note: the Gmail connector I have can create labels but can't delete or rename them — that's not exposed via this API. Both of the above need a quick manual step: Settings (gear icon) → **See all settings** → **Labels** → find `info` and click **remove**; find `concerns` and click **rename**, then type `wavelo-concerns`.
 
 *(The two `[Gmail]/Trash/...` entries in your label list aren't separate labels — they're just Gmail's mirror of trashed messages that happen to carry the `alienvault`/`secops-radware` label. Nothing to rename there.)*
 
