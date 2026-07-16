@@ -170,6 +170,8 @@ Since you read mail through an IMAP client rather than Gmail's web UI day-to-day
 - Gmail exposes each label as an IMAP folder, but a label isn't an exclusive folder — a message keeps living in "All Mail" regardless of which labels it has. Nothing described above deletes or hides anything; it's all still searchable in All Mail as a fallback.
 - "Skip Inbox" removes the `INBOX` label rather than moving the message anywhere, so the message will disappear from your IMAP "INBOX" folder but remain fully visible under the label's own folder and in All Mail.
 - New labels have a "Show in IMAP" checkbox under Gmail Settings > Labels. Check that it's enabled for each new label above, or it won't appear as a folder in your client even though the filter is working correctly.
+- Thunderbird doesn't pick up new/renamed/deleted labels automatically — after making changes in Gmail, right-click the account name → **Subscribe...** → **Refresh** to re-fetch the folder list. A rename or delete can occasionally leave a stale, empty "ghost" folder behind locally; unsubscribe/remove it if so.
+- Your Thunderbird account has "Keep messages in all folders on this computer" unchecked and nothing selected for offline use, so it's running as a thin client — messages are fetched live rather than cached. This doesn't change the Subscribe/Refresh step above, but it does mean any new or ghost folders carry no local data, so there's nothing to clean up beyond removing the folder itself.
 
 ## How to add these in Gmail
 
