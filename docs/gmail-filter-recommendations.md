@@ -78,13 +78,7 @@ The bigger review changed the priority order from my first pass:
 
 ✅ `helpdesk-approvals` is set up and working correctly (label applied, inbox visibility preserved as intended).
 
-"Resolved" notices are pure FYI:
-```
-from:helpdesk@tucows.com subject:"Ticket Resolved"
-```
-Action: Apply new label `helpdesk-resolved`, Skip Inbox.
-
-⚠️ **Not fully working yet:** the label is being applied to matching messages, but Skip Inbox isn't taking effect — all matches still show `INBOX` when checked. Double-check the filter itself has "Skip the Inbox" ticked (Settings → Filters and Blocked Addresses → find this filter → edit), and if it does, re-run the backfill (search the query above, select all matching conversations, apply the label if needed, then click the archive icon to clear them from the inbox).
+✅ `helpdesk-resolved` is set up and working correctly.
 
 **2. Newsletters / webinar marketing (second-highest priority — largest pure-noise bucket)**
 
