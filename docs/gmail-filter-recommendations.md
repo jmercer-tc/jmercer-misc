@@ -4,11 +4,57 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 
 **Limitation:** the Gmail connector I have access to can read your inbox and labels, but it can't create actual Filters (Settings > Filters and Blocked Addresses) — that API isn't exposed to me. So below are ready-to-paste filter recipes: the exact search string for the "Has the words" field, the label to apply, and whether to skip the inbox.
 
-**Naming convention:** new labels use a `category-detail` prefix (`hr-`, `helpdesk-`, `secops-`, etc.) so they sort together alphabetically in an IMAP folder list. Existing labels (`alienvault`, `nessus`, `recorded-future`, `radware`, `ice-aws`, `carta`, `hacker1`, `confluence-digest`) are left as-is — only new labels follow the prefix scheme.
+**Naming convention:** labels use a `category-detail` prefix (`hr-`, `helpdesk-`, `secops-`, etc.) so they sort together alphabetically in an IMAP folder list. This applies both to new labels and to a set of suggested renames for your existing ones, below.
 
-## What's already working (leave alone)
+## Label map: existing, renamed, and new
 
-`nessus`, `recorded-future`, `radware`, and `github`/`jira`/`hacker1` are catching real volume — tens of messages each when you look past the inbox at everything they've already sorted. These filters are doing their job; no changes needed.
+**Existing labels — recommend renaming for consistent sort order**
+
+| Current name | Suggested rename | Why |
+|---|---|---|
+| `alienvault` | `secops-alienvault` | Security vendor feed — groups with your other `secops-` labels |
+| `nessus` | `secops-nessus` | Same |
+| `recorded-future` | `secops-recorded-future` | Same |
+| `ice-aws` | `secops-ice-aws` | Same |
+| `hacker1` | `secops-hackerone` | Same, and corrects the truncated vendor name |
+| `github` | `secops-github` | Dev/ops repo notifications tied to your team |
+| `jira` | `secops-jira` | Ticketing notifications |
+| `secops-radware` | *(no change)* | Already fits the convention |
+| `secops-misc` / `secops-offboarding` / `secops-domains` / `secops-maint` | *(no change)* | Already fit |
+
+**Existing labels — unclear category, not renaming without your input**
+
+| Current name | Note |
+|---|---|
+| `carta` | Sits alongside your vendor-security labels, but Carta is typically cap-table/equity software rather than a security tool — not sure if this is a work security feed or something personal. Let me know what it's tracking and I'll suggest a prefix. |
+| `misc` | Generic catch-all — could rename to `misc-general` for sort order, but not sure it's worth the churn unless you want it grouped near other `misc`-style labels. |
+| `info` | Too generic for me to guess a category confidently. |
+| `concerns` | Same — depends what's actually landing in there. |
+| `Archives.2020` | Looks like a dated one-off archive rather than a live workflow label; probably fine to leave untouched. |
+
+*(The two `[Gmail]/Trash/...` entries in your label list aren't separate labels — they're just Gmail's mirror of trashed messages that happen to carry the `alienvault`/`secops-radware` label. Nothing to rename there.)*
+
+**New labels proposed in this doc**
+
+| Label | Skip inbox? | Purpose |
+|---|---|---|
+| `helpdesk-approvals` | No | Approval requests needing your sign-off |
+| `helpdesk-resolved` | Yes | FYI-only ticket-resolved notices |
+| `newsletters-marketing` | Yes | Perkopolis, Grafana, Docebo, Atlassian survey, AWS marketing, Meraki, Visa/Cybersource, LevelBlue marketing |
+| `newsletters-training` | Yes | Infosec Institute training/poll mail |
+| `secops-github-monitoring` | Yes | Daily GitHub repo monitoring report |
+| `secops-phishnotify` | Yes | PhishNotify "Reported Emails Summary" |
+| `secops-crowdstrike` | No | CrowdStrike TAM/support notices |
+| `hr-hibob` | Yes | HiBob time-off/report notices |
+| `meetings-notes` | Yes | Auto-generated Gemini meeting notes |
+| `billing-exacthosting` | Yes | Exact Hosting invoices |
+| `tools-tempo` | Yes | Tempo timesheet reminders |
+| `lists-it-isac` | Optional | Genuine opt-in IT-ISAC AI SIG mailing list |
+| `confluence-digest` | Yes | Weekly Confluence content digest |
+
+## What's already working (functionally fine, rename is cosmetic only)
+
+`nessus`, `recorded-future`, `secops-radware`, `github`, `jira`, and `hacker1` are catching real volume — tens of messages each when you look past the inbox at everything they've already sorted. These filters are doing their job; the renames suggested above are purely for sort order, not because anything's broken.
 
 ## Priorities, revised after the larger sample
 
@@ -108,7 +154,7 @@ Action: Apply new label `lists-it-isac`. Skip inbox optional — your call.
 ```
 from:(@levelblue.com OR @comms.levelblue.com)
 ```
-Action: Apply existing label `alienvault`. Keep `cybersupport@levelblue.com` ticket-update messages visible in the inbox (may need a response) — only the marketing mail from `experts@comms.levelblue.com` is safe to skip inbox.
+Action: Apply your `alienvault` label (or `secops-alienvault` if you've done the rename above). Keep `cybersupport@levelblue.com` ticket-update messages visible in the inbox (may need a response) — only the marketing mail from `experts@comms.levelblue.com` is safe to skip inbox.
 
 ## Notes for IMAP client use
 
