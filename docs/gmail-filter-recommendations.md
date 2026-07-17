@@ -65,7 +65,9 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 
 The note below originally said `nessus`, `recorded-future`, `secops-radware`, `github`, `jira`, and `hacker1` were "already working" — catching real volume with no filter needed. That was true only because Thunderbird had its own local message filters moving mail into those label-folders over IMAP, which (for Gmail) both applies the label and removes `INBOX` in one step. There was never an underlying Gmail Filter doing this server-side.
 
-When those Thunderbird filters were removed, all four active ones stopped sorting simultaneously — Jira, GitHub, HackerOne, and Recorded Future mail all started piling back into the inbox unlabeled. See the new section 1 below for real Gmail-side recipes to replace them. (Nessus, ICE-AWS, and Radware weren't sending anything in the days right after the Thunderbird filters were removed, so it's not confirmed whether they're also affected — worth a spot-check, and likely the same underlying issue.)
+When those Thunderbird filters were removed, all four active ones stopped sorting simultaneously — Jira, GitHub, HackerOne, and Recorded Future mail all started piling back into the inbox unlabeled. See the new section 1 below for real Gmail-side recipes to replace them. (Nessus, ICE-AWS, and Radware weren't sending anything in the days right after the Thunderbird filters were removed, so it wasn't confirmed at the time whether they were also affected.)
+
+**Update from the second pass:** confirmed — Nessus is affected too. Sampled the most recent Nessus scan-report mail directly and every message carries only `["UNREAD","INBOX"]`; the `secops-nessus` label is never applied despite the label existing. Same root cause, same fix. Added as a fifth recipe in section 1 below.
 
 ## Priorities, revised after the larger sample
 
@@ -80,14 +82,21 @@ The bigger review changed the priority order from my first pass:
 
 **1. Replace Thunderbird-only sorting with real Gmail filters (urgent — currently flooding the inbox)**
 
-✅ All four confirmed live and working correctly — re-checked by sampling recent mail from each sender and verifying the label is applied with `INBOX` absent:
+✅ Four confirmed live and working correctly — re-checked by sampling recent mail from each sender and verifying the label is applied with `INBOX` absent:
 
 - ✅ `secops-jira` (from:jira@wiki-tucows.atlassian.net) — skipping inbox as intended.
 - ✅ `secops-github` (from:notifications@github.com) — skipping inbox as intended.
 - ✅ `secops-hacker1` (from:no-reply@hackerone.com) — skipping inbox as intended.
 - ✅ `secops-recorded-future` (from:alert@recordedfuture.com) — skipping inbox as intended.
 
-For reference, these were the original recipes:
+❌ **`secops-nessus` is not** — this is the biggest single gap found in the second-pass review. The label exists and was renamed, but there's no real Gmail filter behind it; it was riding on the same now-removed Thunderbird rule as the other four. Every sampled Nessus scan-report message in the inbox carries only `UNREAD`/`INBOX`, no label at all. This looked like high volume in the sample (Gmail's own estimate capped out at "201" for `from:nessus@tucows.com in:inbox`, so treat that as "a lot," not literal). Recipe:
+
+```
+from:nessus@tucows.com
+```
+Action: Apply label `secops-nessus`, Skip Inbox — matching the treatment of the other four in this section.
+
+For reference, these were the original recipes for the other four:
 
 ```
 from:jira@wiki-tucows.atlassian.net
@@ -179,6 +188,61 @@ Not spam, a real opt-in working group. Label for easy reference but leave it in 
 from:it-isac.org
 ```
 Action: Apply new label `lists-it-isac`. Skip inbox optional — your call.
+
+## Second pass: new unfiltered senders found in the last ~200 inbox threads
+
+You asked for a review of what's still piling up unfiltered. Went through the full current inbox (~200 threads, 4 pages of 50) and cross-checked every repeat sender against the existing label/filter set. Six real gaps, in priority order by volume/impact. (Nessus is covered above in section 1, since it's the same Thunderbird-dependency root cause as Jira/GitHub/HackerOne/Recorded Future — this list is everything else.)
+
+**10. Helpdesk ticket-lifecycle notices — existing filter is too narrow**
+
+`helpdesk-resolved` is working, but it only matches the "Ticket Resolved" subject line. Three sibling notification types from the same sender are unlabeled and sitting in the inbox: "Ticket Closed - ...", "Ticket Received - ...", and "Ticket Approved/Rejected - [#SR-...] ...". This isn't a broken filter, just a scope gap — the sender sends several distinct lifecycle notices and only one was ever covered.
+
+```
+from:helpdesk@tucows.com (subject:"Ticket Closed" OR subject:"Ticket Received" OR subject:"Ticket Approved" OR subject:"Ticket Rejected")
+```
+Suggested action: add these subject clauses into the existing `helpdesk-resolved` filter (edit the filter, OR the new subjects into the same query) rather than creating a new label. Your call on Skip Inbox though — "Resolved" and "Closed" are pure FYI like the existing filter, but "Ticket Received" is arguably worth seeing (confirms your request landed) and "Approved/Rejected" is closer to the actionable `helpdesk-approvals` bucket. Could split it: Closed/Resolved → skip inbox with `helpdesk-resolved`; Received/Approved/Rejected → keep visible, maybe folded into `helpdesk-approvals` instead. Flagging rather than deciding for you, same as the approvals/resolved split originally.
+
+**11. `domains-sreteam@tucows.com` — SRE incident status broadcasts**
+
+Recurring "[ops] [SRE Status]" messages (investigating/monitoring/resolved) for domains-team incidents. Confirmed via `from:domains-sreteam@tucows.com in:inbox` — about 13 in the current inbox, all unlabeled. `secops-domains` already exists and already fits the naming convention, so this could fold in there rather than becoming a new label.
+
+```
+from:domains-sreteam@tucows.com
+```
+Suggested action: apply existing `secops-domains` label. Skip Inbox is the one part I'd leave to you — these are live incident updates, so there's a real case for keeping "investigating"/"monitoring" visible while an incident is open, and only the closing "resolved" message is pure FYI. A single filter can't distinguish between those without more precise subject matching, so it's an all-or-nothing call unless you want a two-part filter (e.g. skip inbox only for `subject:resolved`, keep the rest visible).
+
+**12. Confluence digest — finally implementing the label proposed earlier in this doc**
+
+`confluence-digest` has been sitting in the "New labels proposed" table since the first pass without ever getting a recipe. Confirmed it's still needed: `from:confluence@wiki-tucows.atlassian.net` turns up the recurring "Jim Mercer, your team is working on these pages" (weekly) and "Daily digest: updates from..." messages, unlabeled. Important: the same address also sends per-comment/@mention notifications (e.g. "[Confluence] Operations > ...") that should stay visible — so the recipe targets the digest subject lines specifically rather than the whole sender.
+
+```
+from:confluence@wiki-tucows.atlassian.net (subject:"your team is working on these pages" OR subject:"Daily digest")
+```
+Action: apply new label `confluence-digest`, Skip Inbox. Leaves comment/mention notifications from the same address untouched in the inbox.
+
+**13. incident.io — this looks like a broken automation, not just a filter gap**
+
+Recurring "Workflow failed to run: When an Wavelo incident is created or changed: Send a webhook" error notices from `no-reply@incident.io`, seen repeatedly between 2026-06-17 and 2026-06-24. This reads like an actual broken integration (a webhook incident.io tries to fire on every incident create/update, failing every time) rather than routine notification volume — worth checking/rebuilding that workflow's webhook connection in incident.io directly, since a filter only hides the symptom. As a stopgap in the meantime:
+
+```
+from:no-reply@incident.io subject:"Workflow failed to run"
+```
+Suggested action: fold into existing `secops-misc`, Skip Inbox — but flagging this primarily as "go fix the automation," not "add a filter."
+
+**14. Fellow.app — fold into existing `meetings-notes`**
+
+Weekly digest emails and individual "shared meeting notes" messages from `no-reply@fellow.app`, unlabeled. Same functional category as the Gemini notes already covered by `meetings-notes`, so this is a one-line extension rather than a new label:
+
+```
+from:(gemini-notes@google.com OR no-reply@fellow.app)
+```
+Action: update the existing `meetings-notes` filter to add `OR from:no-reply@fellow.app`, Skip Inbox.
+
+**Lower-priority, noted but not acted on:**
+
+- `no-reply@siebert.com` — recurring holiday/newsletter-style mail, low-ish volume. Candidate for folding into `newsletters-marketing` if it keeps showing up.
+- `support-noreply@meraki.com` — a second Meraki sending address; the existing `newsletters-marketing` filter only lists `noreply@meraki.com`. Worth adding as an `OR` if this address turns out to be sending anything beyond the odd one-off.
+- `info.blazemeter@perforce.com` — only ~2 instances seen, too low-volume to bother with a filter yet.
 
 ## The AlienVault/LevelBlue fix (low priority, do whenever)
 
