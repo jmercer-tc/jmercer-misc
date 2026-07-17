@@ -206,19 +206,28 @@ You asked for a review of what's still piling up unfiltered. Went through the fu
 
 `helpdesk-resolved` is working, but it only matches the "Ticket Resolved" subject line. Three sibling notification types from the same sender are unlabeled and sitting in the inbox: "Ticket Closed - ...", "Ticket Received - ...", and "Ticket Approved/Rejected - [#SR-...] ...". This isn't a broken filter, just a scope gap — the sender sends several distinct lifecycle notices and only one was ever covered.
 
+**Decided:** everything skips the inbox, split across two labels so the separate message counts stay visible for monitoring:
+
 ```
-from:helpdesk@tucows.com (subject:"Ticket Closed" OR subject:"Ticket Received" OR subject:"Ticket Approved" OR subject:"Ticket Rejected")
+from:helpdesk@tucows.com (subject:"Ticket Closed" OR subject:"Ticket Resolved")
 ```
-Suggested action: add these subject clauses into the existing `helpdesk-resolved` filter (edit the filter, OR the new subjects into the same query) rather than creating a new label. Your call on Skip Inbox though — "Resolved" and "Closed" are pure FYI like the existing filter, but "Ticket Received" is arguably worth seeing (confirms your request landed) and "Approved/Rejected" is closer to the actionable `helpdesk-approvals` bucket. Could split it: Closed/Resolved → skip inbox with `helpdesk-resolved`; Received/Approved/Rejected → keep visible, maybe folded into `helpdesk-approvals` instead. Flagging rather than deciding for you, same as the approvals/resolved split originally.
+Action: keep in the existing `helpdesk-resolved` filter (just widen its query to add `OR subject:"Ticket Closed"`), Skip Inbox — no change to this label's existing behavior.
+
+```
+from:helpdesk@tucows.com (subject:"Ticket Received" OR subject:"Ticket Approved" OR subject:"Ticket Rejected")
+```
+Action: new filter, applying the existing `helpdesk-approvals` label, **Skip Inbox** (this is a separate filter from the actionable approval-request one already using that label — that one stays visible since it needs your sign-off; this one is just an FYI lifecycle notice reusing the same label for grouping).
 
 **11. `domains-sreteam@tucows.com` — SRE incident status broadcasts**
 
-Recurring "[ops] [SRE Status]" messages (investigating/monitoring/resolved) for domains-team incidents. Confirmed via `from:domains-sreteam@tucows.com in:inbox` — about 13 in the current inbox, all unlabeled. `secops-domains` already exists and already fits the naming convention, so this could fold in there rather than becoming a new label.
+Recurring "[ops] [SRE Status]" messages (investigating/monitoring/resolved) for domains-team incidents. Confirmed via `from:domains-sreteam@tucows.com in:inbox` — about 13 in the current inbox, all unlabeled. `secops-domains` already exists and already fits the naming convention, so this folds in there rather than becoming a new label.
+
+**Decided:** same approach as the helpdesk items above — skip inbox entirely, monitor via the label's message count instead of inbox visibility:
 
 ```
 from:domains-sreteam@tucows.com
 ```
-Suggested action: apply existing `secops-domains` label. Skip Inbox is the one part I'd leave to you — these are live incident updates, so there's a real case for keeping "investigating"/"monitoring" visible while an incident is open, and only the closing "resolved" message is pure FYI. A single filter can't distinguish between those without more precise subject matching, so it's an all-or-nothing call unless you want a two-part filter (e.g. skip inbox only for `subject:resolved`, keep the rest visible).
+Action: apply existing `secops-domains` label, Skip Inbox — including "investigating"/"monitoring" messages, not just "resolved."
 
 **12. Confluence digest — finally implementing the label proposed earlier in this doc**
 
@@ -296,7 +305,7 @@ For each recurring/new sender you find, ask in order:
 1. Does it clearly belong to one of the existing category prefixes below (same vendor family, same functional purpose)? If so, extend that label's filter query to include the new `from:` address rather than creating a new label. (Edit the filter: Settings → Filters and Blocked Addresses → find it → edit → add `OR from:new-address@example.com` to the existing "Has the words" query.)
 2. If it doesn't fit an existing bucket, is the volume sustained (roughly 2+ per week, or a recognizable recurring pattern) rather than a one-off? If yes, create a new label with a `category-detail` name matching the taxonomy below, plus a new filter recipe (see format used throughout this doc: search query → label → skip-inbox y/n).
 3. If it's low-volume and doesn't fit anywhere, it's fine to leave it unlabeled/in-inbox rather than inventing a label for a single sender — that's what the `misc` label (or manual handling) is for.
-4. For anything actionable (needs a reply/decision, like helpdesk approvals or vendor ticket updates), default to **not** skipping the inbox even if it's from a vendor you'd otherwise auto-file — visibility matters more than tidiness for those.
+4. For anything genuinely actionable — needs *your* reply or decision, like an approval request specifically waiting on you — default to **not** skipping the inbox even if it's from a vendor you'd otherwise auto-file. But Jim's stated preference (as of the second-pass review) is to keep the inbox itself as empty as possible otherwise: FYI-style lifecycle notices, status broadcasts, and ticket updates should skip inbox and get their own label even if they're not purely closed/resolved — he tracks new activity via the label/folder's unread or message count rather than inbox visibility. When in doubt between "keep visible" and "skip inbox," lean toward skip-inbox-with-a-dedicated-label unless the message is a direct ask of Jim himself.
 
 **3. Check for duplicate/multi-alias streams**
 
