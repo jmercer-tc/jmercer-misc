@@ -198,15 +198,27 @@ FreeBSD/Ubuntu guests on them — the toolchain is:
   works against both FreeBSD and Ubuntu targets)
 - **curl + jq** for any direct Proxmox REST API calls outside of OpenTofu
 
-`freebsd/bootstrap-jail-packages.sh` (in this repo) installs all of this as
-root, once, inside the jail:
+Install all of this as root, once, inside the jail:
 
 ```
-jexec opencode sh /path/to/bootstrap-jail-packages.sh
+jexec opencode pkg install -y \
+    git \
+    curl \
+    jq \
+    opentofu \
+    ansible \
+    python311 \
+    py311-pip \
+    rsync \
+    bash \
+    ripgrep \
+    tmux \
+    gmake \
+    pkgconf \
+    ca_root_nss
 ```
 
-It installs: `git curl jq opentofu ansible python311 py311-pip rsync bash
-ripgrep tmux gmake pkgconf ca_root_nss`. A few notes on why each is there:
+A few notes on why each package is there:
 
 - `python311` / `py311-pip` — Ansible's own runtime dependency, and useful
   generally for scripting/collections that need extra Python libs.
