@@ -59,9 +59,11 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 | `lists-it-isac` | Optional | Genuine opt-in IT-ISAC AI SIG mailing list |
 | `confluence-digest` | Yes | Weekly Confluence content digest |
 
-## What's already working (functionally fine, rename is cosmetic only)
+## Update: "already working" labels turned out to be Thunderbird-dependent, not real Gmail filters
 
-`nessus`, `recorded-future`, `secops-radware`, `github`, `jira`, and `hacker1` are catching real volume — tens of messages each when you look past the inbox at everything they've already sorted. These filters are doing their job; the renames suggested above are purely for sort order, not because anything's broken.
+The note below originally said `nessus`, `recorded-future`, `secops-radware`, `github`, `jira`, and `hacker1` were "already working" — catching real volume with no filter needed. That was true only because Thunderbird had its own local message filters moving mail into those label-folders over IMAP, which (for Gmail) both applies the label and removes `INBOX` in one step. There was never an underlying Gmail Filter doing this server-side.
+
+When those Thunderbird filters were removed, all four active ones stopped sorting simultaneously — Jira, GitHub, HackerOne, and Recorded Future mail all started piling back into the inbox unlabeled. See the new section 1 below for real Gmail-side recipes to replace them. (Nessus, ICE-AWS, and Radware weren't sending anything in the days right after the Thunderbird filters were removed, so it's not confirmed whether they're also affected — worth a spot-check, and likely the same underlying issue.)
 
 ## Priorities, revised after the larger sample
 
@@ -74,13 +76,39 @@ The bigger review changed the priority order from my first pass:
 
 ## Filter recipes
 
-**1. Helpdesk — split into actionable vs. FYI (highest priority)**
+**1. Replace Thunderbird-only sorting with real Gmail filters (urgent — currently flooding the inbox)**
+
+These four were never real Gmail Filters (see note above) — they need to be created from scratch, not just restored:
+
+```
+from:jira@wiki-tucows.atlassian.net
+```
+Action: Apply label `jira` (or `secops-jira`), Skip Inbox. Keep it as one label covering everything from Jira, including "Pending approval" mail — this is a separate system from the helpdesk approvals workflow below and doesn't need the same actionable/FYI split.
+
+```
+from:notifications@github.com
+```
+Action: Apply label `github` (or `secops-github`), Skip Inbox.
+
+```
+from:no-reply@hackerone.com
+```
+Action: Apply label `hacker1` (or `secops-hackerone`), Skip Inbox. Highest current volume of the four.
+
+```
+from:alert@recordedfuture.com
+```
+Action: Apply label `recorded-future` (or `secops-recorded-future`), Skip Inbox.
+
+For each, check "Also apply filter to matching conversations" at creation time to backfill what's piled up since the Thunderbird filters were removed.
+
+**2. Helpdesk — split into actionable vs. FYI**
 
 ✅ `helpdesk-approvals` is set up and working correctly (label applied, inbox visibility preserved as intended).
 
 ✅ `helpdesk-resolved` is set up and working correctly.
 
-**2. Newsletters / webinar marketing (second-highest priority — largest pure-noise bucket)**
+**3. Newsletters / webinar marketing (largest pure-noise bucket)**
 
 ```
 from:(customerservice@perkopolis.com OR update@grafana.com OR customereducation@docebo.com OR events@docebo.com OR contactus@docebo.com OR info@e.atlassian.com OR aws-marketing-email-replies@amazon.com OR noreply@meraki.com OR donotreply@notifications.visaacceptance.com OR experts@comms.levelblue.com)
@@ -91,7 +119,7 @@ Action: Apply new label `newsletters-marketing`, Skip Inbox.
 
 Worth calling out: Perkopolis and Infosec Institute mail lands **three times each** — once per alias (`@tucows.com`, `@tucowsinc.com`, `@wavelo.com`). A filter can bundle it out of your inbox, but it won't stop the triplication. If you want that gone entirely, unsubscribing via the link in one or two of those emails (per alias) is the only real fix — a filter can't merge duplicate sends across different recipient addresses.
 
-**3. Automated security reports**
+**4. Automated security reports**
 
 ✅ `secops-github-monitoring` and ✅ `secops-phishnotify` are both set up and working correctly.
 
@@ -100,35 +128,35 @@ from:(TAM-Team-noreply@crowdstrike.com OR do-not-reply@crowdstrike.com)
 ```
 Action: Apply new label `secops-crowdstrike`. Keep in inbox — these are TAM/support notices worth seeing as they come in, just worth a dedicated label.
 
-**4. HR / HiBob notices**
+**5. HR / HiBob notices**
 
 ```
 from:no-reply@hibob.com
 ```
 Action: Apply new label `hr-hibob`, Skip Inbox. FYI confirmations (time-off approvals, scheduled reports) — nothing actionable once sent.
 
-**5. Auto-generated meeting notes**
+**6. Auto-generated meeting notes**
 
 ```
 from:gemini-notes@google.com
 ```
 Action: Apply new label `meetings-notes`, Skip Inbox. One of these per standup/meeting — useful as reference, not something that needs inbox space.
 
-**6. Billing / invoices**
+**7. Billing / invoices**
 
 ```
 from:help@exacthosting.com
 ```
 Action: Apply new label `billing-exacthosting`, Skip Inbox.
 
-**7. Internal tools**
+**8. Internal tools**
 
 ```
 from:no-reply@tempo.io
 ```
 Action: Apply new label `tools-tempo`, Skip Inbox. Timesheet reminders — FYI only.
 
-**8. Genuine mailing list — IT-ISAC AI SIG**
+**9. Genuine mailing list — IT-ISAC AI SIG**
 
 Not spam, a real opt-in working group. Label for easy reference but leave it in the inbox since meeting notes/slide decks tend to be time-sensitive:
 ```
@@ -169,6 +197,7 @@ The fastest signal is: what's sitting in the inbox that isn't already covered by
 - In Gmail search, you can approximate "stuff my filters aren't catching" by searching `in:inbox` and eyeballing which threads *don't* already carry one of your category labels (Gmail's search UI doesn't do "has no label" cleanly, so this is manual scanning, not a single magic query).
 - Check whether existing filters are still catching what they should: search `label:secops-nessus` (etc., for any label) and confirm the volume looks consistent with past patterns — a sudden drop can mean a vendor changed their sending address.
 - It's also worth glancing at "All Mail" occasionally for anything that never even reaches "inbox" state but also never got labeled — e.g. mail that arrived filtered by Gmail's own spam heuristics rather than your filters.
+- If a whole batch of previously-sorted senders suddenly starts flooding the inbox all at once (rather than one sender drifting), don't assume the Gmail filter broke — check whether the sorting was actually happening via a Thunderbird client-side filter instead. A Thunderbird "move to folder" rule on a Gmail IMAP account applies the label *and* removes it from Inbox in one step, which looks identical to a real Gmail Filter until you disable or lose the Thunderbird rule. Jira, GitHub, HackerOne, and Recorded Future all turned out to be running this way as of this review — worth confirming each label in the taxonomy below actually has a filter under Settings → Filters and Blocked Addresses, not just a Thunderbird rule.
 
 **2. Decide: fold into an existing label, or create a new one**
 
