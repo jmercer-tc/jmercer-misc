@@ -43,7 +43,14 @@ service linux start
 
 ## 3. Create the jail
 
-`/etc/jail.conf`:
+This host's `/etc/jail.conf` already has:
+
+```
+.include "/etc/jail.conf.d/*.conf";
+```
+
+so per-jail config goes in its own file rather than being appended to the
+main `/etc/jail.conf`. Create `/etc/jail.conf.d/opencode.conf`:
 
 ```
 opencode {
@@ -96,10 +103,11 @@ sysrc jail_list="opencode"
 
 `jail_enable="YES"` turns on the jail subsystem at boot. `jail_list` isn't
 strictly required with the `jail.conf` format — if omitted, FreeBSD defaults
-to starting every jail defined in `/etc/jail.conf` — but setting it
-explicitly to `opencode` is worth doing anyway: it means if you ever define
-other jails in the same `jail.conf` later, they won't autostart unless you
-deliberately add them to the list too.
+to starting every jail defined across `/etc/jail.conf` and everything it
+`.include`s from `/etc/jail.conf.d/*.conf` — but setting it explicitly to
+`opencode` is worth doing anyway: it means if you (or whoever else manages
+this host) add other jails under `/etc/jail.conf.d/` later, they won't
+autostart unless deliberately added to the list too.
 
 No changes are needed for Linuxulator itself — `linux_enable="YES"` (from
 step 2) already persists in `/etc/rc.conf`, and FreeBSD's boot ordering
