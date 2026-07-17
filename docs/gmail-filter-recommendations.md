@@ -56,7 +56,7 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 | `secops-crowdstrike` | No | CrowdStrike TAM/support notices |
 | `hr-hibob` | Yes | HiBob time-off/report notices |
 | `meetings-notes` | Yes | Auto-generated Gemini meeting notes |
-| `billing-exacthosting` | Yes | Exact Hosting invoices |
+| `misc-invoices` | Yes | Billing/invoice mail generally, starting with Exact Hosting — a catchall rather than a per-vendor label, so future invoice senders can be folded in here too |
 | `tools-tempo` | Yes | Tempo timesheet reminders |
 | `lists-it-isac` | Optional | Genuine opt-in IT-ISAC AI SIG mailing list |
 | `confluence-digest` | Yes | Weekly Confluence content digest |
@@ -73,7 +73,7 @@ The bigger review changed the priority order from my first pass:
 
 - **Helpdesk approval/resolved traffic and Perkopolis's triple-alias marketing mail are your two biggest noise sources** — bigger than the small sample suggested. These are the highest-value filters to set up first.
 - **The AlienVault → LevelBlue rebrand gap is real but low-volume** (only a couple of messages total). Worth fixing for correctness, but it's a "whenever" fix, not urgent.
-- A few moderate-volume senders only showed up in the larger review: CrowdStrike TAM notices, Exact Hosting invoices, and Tempo timesheet reminders. Added as their own recipes below.
+- A few moderate-volume senders only showed up in the larger review: CrowdStrike TAM notices, Exact Hosting invoices, and Tempo timesheet reminders. Added as their own recipes below (Exact Hosting now folded into a general `misc-invoices` catchall rather than its own vendor-specific label).
 - Infosec Institute's training/marketing mail is higher-volume (9+ in the sample) than first estimated — comparable to Docebo.
 
 ## Filter recipes
@@ -158,10 +158,12 @@ Action: Apply new label `meetings-notes`, Skip Inbox. One of these per standup/m
 
 **7. Billing / invoices**
 
+Made this a general catchall label rather than a per-vendor one, since billing/invoice mail tends to come from a handful of small vendors rather than one:
+
 ```
 from:help@exacthosting.com
 ```
-Action: Apply new label `billing-exacthosting`, Skip Inbox.
+Action: Apply new label `misc-invoices`, Skip Inbox. When another billing/invoice sender shows up later, add it to this same filter's query (`OR from:new-vendor@example.com`) rather than creating a new label.
 
 **8. Internal tools**
 
@@ -244,7 +246,7 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 | `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
 | `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
 | `meetings-` | Auto-generated meeting artifacts (Gemini notes) |
-| `billing-` | Vendor invoices |
+| `misc-` | Catchall categories that don't warrant their own prefix (e.g. `misc-invoices` for billing/invoice mail across vendors) |
 | `tools-` | Internal tool notifications (Tempo) |
 | `lists-` | Genuine opt-in mailing lists/working groups (IT-ISAC) |
 | `wavelo-` | Internal Wavelo-specific labels (e.g. `wavelo-concerns`) |
