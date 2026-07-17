@@ -49,7 +49,7 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 |---|---|---|
 | `helpdesk-approvals` | No | Approval requests needing your sign-off |
 | `helpdesk-resolved` | Yes | FYI-only ticket-resolved notices |
-| `newsletters-marketing` | Yes | Perkopolis, Grafana, Docebo, Atlassian survey, AWS marketing, Meraki, Visa/Cybersource, LevelBlue marketing |
+| `newsletters-marketing` | Yes | Perkopolis, Grafana, Docebo, Atlassian survey, AWS marketing, Visa/Cybersource, LevelBlue marketing |
 | `newsletters-training` | Yes | Infosec Institute training/poll mail |
 | `secops-github-monitoring` | Yes | Daily GitHub repo monitoring report |
 | `secops-phishnotify` | Yes | PhishNotify "Reported Emails Summary" |
@@ -60,6 +60,8 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 | `hr-tempo` | Yes | Tempo timesheet reminders |
 | `lists-it-isac` | Optional | Genuine opt-in IT-ISAC AI SIG mailing list |
 | `confluence-digest` | Yes | Weekly Confluence content digest |
+| `secops-netops` | Yes | Meraki network device notifications (moved out of `newsletters-marketing` — networking gear, not marketing) |
+| `incidentio-alerts` | Yes | incident.io platform notifications — its own dedicated label since Jim expects this system to grow in importance |
 
 ## Update: "already working" labels turned out to be Thunderbird-dependent, not real Gmail filters
 
@@ -126,11 +128,12 @@ Action: Apply label `secops-recorded-future`, Skip Inbox.
 
 **3. Newsletters / webinar marketing (largest pure-noise bucket)**
 
-✅ `newsletters-marketing` is set up and working correctly — confirmed across ~20 sampled messages (Perkopolis, Grafana, Docebo, Atlassian, AWS marketing, Meraki, Visa/Cybersource, LevelBlue), all correctly labeled with inbox skipped. Recipe for reference:
+✅ `newsletters-marketing` is set up and working correctly — confirmed across ~20 sampled messages (Perkopolis, Grafana, Docebo, Atlassian, AWS marketing, Visa/Cybersource, LevelBlue), all correctly labeled with inbox skipped. Recipe for reference:
 
 ```
-from:(customerservice@perkopolis.com OR update@grafana.com OR customereducation@docebo.com OR events@docebo.com OR contactus@docebo.com OR info@e.atlassian.com OR aws-marketing-email-replies@amazon.com OR noreply@meraki.com OR donotreply@notifications.visaacceptance.com OR experts@comms.levelblue.com)
+from:(customerservice@perkopolis.com OR update@grafana.com OR customereducation@docebo.com OR events@docebo.com OR contactus@docebo.com OR info@e.atlassian.com OR aws-marketing-email-replies@amazon.com OR donotreply@notifications.visaacceptance.com OR experts@comms.levelblue.com)
 ```
+Note: Meraki has been pulled out of this filter — see `secops-netops` below. It's networking gear, not really "marketing," and it makes more sense grouped with other network/security device feeds.
 
 ✅ `newsletters-training` (Infosec Institute) is set up and working correctly.
 
@@ -146,6 +149,15 @@ Worth calling out: Perkopolis and Infosec Institute mail lands **three times eac
 from:(TAM-Team-noreply@crowdstrike.com OR do-not-reply@crowdstrike.com)
 ```
 Action: Apply new label `secops-crowdstrike`, Skip Inbox.
+
+**4a. Meraki network device notifications — own label, moved out of newsletters-marketing**
+
+Jim's call: Meraki mail (both known sending addresses — the original `noreply@meraki.com` already caught by `newsletters-marketing`, plus the second address `support-noreply@meraki.com` found unlabeled in the second-pass review) should live under a dedicated `secops-netops` label rather than under the marketing catchall.
+
+```
+from:(noreply@meraki.com OR support-noreply@meraki.com)
+```
+Action: create new label `secops-netops`, Skip Inbox. Remove `noreply@meraki.com` from the `newsletters-marketing` filter's query if it's still there live (see the updated recipe in section 3 above).
 
 **5. HR / HiBob notices**
 
@@ -238,14 +250,14 @@ from:confluence@wiki-tucows.atlassian.net (subject:"your team is working on thes
 ```
 Action: apply new label `confluence-digest`, Skip Inbox. Leaves comment/mention notifications from the same address untouched in the inbox.
 
-**13. incident.io — this looks like a broken automation, not just a filter gap**
+**13. incident.io — dedicated label (new system, expected to grow)**
 
-Recurring "Workflow failed to run: When an Wavelo incident is created or changed: Send a webhook" error notices from `no-reply@incident.io`, seen repeatedly between 2026-06-17 and 2026-06-24. This reads like an actual broken integration (a webhook incident.io tries to fire on every incident create/update, failing every time) rather than routine notification volume — worth checking/rebuilding that workflow's webhook connection in incident.io directly, since a filter only hides the symptom. As a stopgap in the meantime:
+Recurring "Workflow failed to run: When an Wavelo incident is created or changed: Send a webhook" error notices from `no-reply@incident.io`, seen repeatedly between 2026-06-17 and 2026-06-24. This still reads like a genuinely broken integration worth fixing at the source (rebuilding the webhook connection in incident.io's workflow settings) — a filter doesn't fix that. But per Jim's call, incident.io is a new system that's going to become more important, so rather than folding its mail into the generic `secops-misc` catchall, it gets its own dedicated label now — room to grow into as more notification types show up (on-call alerts, postmortem summaries, etc.), not just this one error:
 
 ```
-from:no-reply@incident.io subject:"Workflow failed to run"
+from:no-reply@incident.io
 ```
-Suggested action: fold into existing `secops-misc`, Skip Inbox — but flagging this primarily as "go fix the automation," not "add a filter."
+Action: create new label `incidentio-alerts`, Skip Inbox. Deliberately scoped to the whole sender rather than just the "Workflow failed to run" subject, so future incident.io notification types land here automatically too.
 
 **14. Fellow.app — fold into existing `meetings-notes`**
 
@@ -256,12 +268,11 @@ from:(gemini-notes@google.com OR no-reply@fellow.app)
 ```
 Action: update the existing `meetings-notes` filter to add `OR from:no-reply@fellow.app`, Skip Inbox.
 
-**Lower-priority, noted but not acted on:**
+**Resolved, no filter needed:**
 
-- `support-noreply@meraki.com` — a second Meraki sending address; the existing `newsletters-marketing` filter only lists `noreply@meraki.com`. Worth adding as an `OR` if this address turns out to be sending anything beyond the odd one-off.
-- `info.blazemeter@perforce.com` — only ~2 instances seen, too low-volume to bother with a filter yet.
+- ✅ `info.blazemeter@perforce.com` — Jim unsubscribed directly, so this is closed out rather than needing a filter.
 
-(`no-reply@siebert.com` was also found here — Jim's call was to fold it into `hr-stocks` rather than `newsletters-marketing`; see section 5a above.)
+(`no-reply@siebert.com` and both Meraki addresses were also found here — folded into `hr-stocks` and the new `secops-netops` respectively; see sections 5a and 4a above.)
 
 ## The AlienVault/LevelBlue fix (low priority, do whenever)
 
@@ -324,7 +335,7 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 
 | Prefix | Used for |
 |---|---|
-| `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, misc/offboarding/domains/maint) |
+| `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, misc/offboarding/domains/maint, `-netops` for Meraki network devices) |
 | `hr-` | HR/compensation/timesheet/equity systems (HiBob, Tempo, `hr-stocks` for Carta + Siebert) |
 | `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
 | `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
@@ -333,6 +344,7 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 | `lists-` | Genuine opt-in mailing lists/working groups (IT-ISAC) |
 | `wavelo-` | Internal Wavelo-specific labels (e.g. `wavelo-concerns`) |
 | `confluence-` | Confluence digest-style notifications |
+| `incidentio-` | incident.io platform notifications — its own prefix since Jim expects this system to grow beyond the one alert type currently filtered |
 
 When in doubt, prefer reusing a prefix over inventing a new one — the whole point of the convention is that IMAP folders in Thunderbird sort together by category, and a proliferation of one-off prefixes defeats that.
 
