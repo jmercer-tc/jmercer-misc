@@ -58,17 +58,32 @@ opencode {
     ip4.addr      = "em0|198.18.51.27/24";
     path          = "/jails/opencode";
 
+    exec.prepare = "
+        mkdir -p /jails/opencode/compat/linux/dev/fd;
+        mkdir -p /jails/opencode/compat/linux/dev/shm;
+        mkdir -p /jails/opencode/compat/linux/proc;
+        mkdir -p /jails/opencode/compat/linux/sys;
+    ";
     exec.start  = "/bin/sh /etc/rc";
     exec.stop   = "/bin/sh /etc/rc.shutdown";
 
     mount.devfs;
-    allow.mount;
-    allow.mount.devfs;
-    allow.mount.procfs;
-    allow.mount.linprocfs;
-    allow.mount.linsysfs;
+    mount.fstab = "/etc/jail.conf.d/opencode.fstab";
     linux = "new";
 }
+```
+
+`mount.fstab` is what actually mounts `linprocfs`/`linsysfs` — the two Linux
+`/proc`/`/sys` equivalents that Bun (and any Linux binary run through the
+Linuxulator) expects to exist. Create the matching fstab file it points to,
+`/etc/jail.conf.d/opencode.fstab`:
+
+```
+devfs       /jails/opencode/compat/linux/dev      devfs       rw,late                    0 0
+linprocfs   /jails/opencode/compat/linux/proc     linprocfs   rw,late                    0 0
+linsysfs    /jails/opencode/compat/linux/sys      linsysfs    rw,late                    0 0
+fdescfs     /jails/opencode/compat/linux/dev/fd   fdescfs     rw,linrdlnk,late           0 0
+tmpfs       /jails/opencode/compat/linux/dev/shm  tmpfs       rw,late,mode=1777,size=1g  0 0
 ```
 
 Notes on the jail.conf settings:
@@ -79,9 +94,20 @@ Notes on the jail.conf settings:
 - `linux = "new"` gives the jail its own private Linux emulation
   environment/branding rather than sharing the host's, keeping the Linux
   userland fully contained inside the jail's own filesystem.
-- The `allow.mount.*` lines are required so `linprocfs`/`linsysfs` (Linux's
-  `/proc` and `/sys` equivalents) can be mounted inside the jail — Bun/Node
-  style runtimes expect these to exist.
+- `mount.fstab` (like `mount.devfs`) is performed by the host's `jail(8)`
+  framework at jail start/stop, not by anything running inside the jail —
+  so no `allow.mount.*` permission bits are needed for it. Those bits only
+  matter if a process *inside* the jail needs to call `mount(2)` itself,
+  which isn't the case here.
+- **`fdescfs` must use the `linrdlnk` option.** Without it, `readlink()` on
+  `/dev/fd/N` returns `EINVAL` inside the jail, and Bun-based tools —
+  opencode included — hang silently at startup with no output or error,
+  because their working-directory resolution deadlocks on that failed
+  `readlink`. Nothing about the failure looks like a mount problem, so
+  this is worth getting right up front rather than debugging later.
+- `exec.prepare` creates the mount-point directories before `mount.fstab`
+  tries to mount onto them; the mounts fail if the target directories
+  don't already exist.
 
 Create the jail root filesystem and start the jail:
 
@@ -297,3 +323,16 @@ surface exposed on the network.
 - Upstream opencode has hardcoded platform checks that only allow
   `linux`/`darwin`/`win32`, tracked in the project's GitHub issues for
   native FreeBSD support (not yet merged as of this writing).
+- Missing `linrdlnk` on the `fdescfs` mount (see step 3) causes opencode to
+  hang silently at startup rather than erroring — if that happens, check
+  the fstab mount options before anything else.
+- **Don't `nullfs`-mount a single file** (e.g. a config or credentials file
+  like `auth.json`) into the jail. An atomic-replace `rename(2)` over a
+  single-file `nullfs` target can wedge the host kernel in `_vn_lock`,
+  and even `SIGKILL` won't free the stuck process — a full reboot is the
+  only way out. If you want host/jail state shared (e.g. opencode's
+  `~/.local/share/opencode` directory), `nullfs`-mount the containing
+  *directory*, not the individual file. This has nothing to do with
+  Linuxulator specifically — it applies to `nullfs` in general — but it's
+  an easy trap to hit once you start sharing config between the host and
+  this jail.
