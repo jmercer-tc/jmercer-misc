@@ -41,7 +41,7 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 
 Note: the Gmail connector I have can create labels but can't delete or rename them — that's not exposed via this API, so all of the renames and the `info` deletion above were done manually via Settings → Labels. The `misc` label above is the only one still pending that same manual step, if you decide to rename it.
 
-*(The two `[Gmail]/Trash/...` entries in your label list aren't separate labels — they're just Gmail's mirror of trashed messages that happen to carry the `alienvault`/`secops-radware` label. Nothing to rename there.)*
+*(The two `[Gmail]/Trash/...` entries in your label list aren't separate labels — they're just Gmail's mirror of trashed messages that happen to carry the `alienvault`/`secops-radware` label. Update: these have since cleared on their own — they no longer appear in the label list at all, consistent with Trash being emptied or those messages no longer qualifying for the overlap.)*
 
 **New labels proposed in this doc**
 
@@ -80,31 +80,34 @@ The bigger review changed the priority order from my first pass:
 
 **1. Replace Thunderbird-only sorting with real Gmail filters (urgent — currently flooding the inbox)**
 
-These four were never real Gmail Filters (see note above) — they need to be created from scratch, not just restored:
+✅ All four confirmed live and working correctly — re-checked by sampling recent mail from each sender and verifying the label is applied with `INBOX` absent:
+
+- ✅ `secops-jira` (from:jira@wiki-tucows.atlassian.net) — skipping inbox as intended.
+- ✅ `secops-github` (from:notifications@github.com) — skipping inbox as intended.
+- ✅ `secops-hacker1` (from:no-reply@hackerone.com) — skipping inbox as intended.
+- ✅ `secops-recorded-future` (from:alert@recordedfuture.com) — skipping inbox as intended.
+
+For reference, these were the original recipes:
 
 ```
 from:jira@wiki-tucows.atlassian.net
 ```
 Action: Apply label `secops-jira` (new label — starting fresh rather than reusing/renaming the old `jira` label). Skip Inbox. Keep it as one label covering everything from Jira, including "Pending approval" mail — this is a separate system from the helpdesk approvals workflow below and doesn't need the same actionable/FYI split.
 
-Since this is a clean start, don't check "Also apply filter to matching conversations" for this one — the existing `jira`-labeled mail is being deleted rather than migrated, so there's nothing old to backfill. Once `secops-jira` is confirmed working on new mail, delete the old `jira` label (and its messages, if desired) via Settings → Labels.
-
 ```
 from:notifications@github.com
 ```
-Action: Apply label `github` (or `secops-github`), Skip Inbox.
+Action: Apply label `secops-github`, Skip Inbox.
 
 ```
 from:no-reply@hackerone.com
 ```
-Action: Apply label `hacker1` (or `secops-hackerone`), Skip Inbox. Highest current volume of the four.
+Action: Apply label `secops-hacker1`, Skip Inbox. Highest current volume of the four.
 
 ```
 from:alert@recordedfuture.com
 ```
-Action: Apply label `recorded-future` (or `secops-recorded-future`), Skip Inbox.
-
-For each, check "Also apply filter to matching conversations" at creation time to backfill what's piled up since the Thunderbird filters were removed.
+Action: Apply label `secops-recorded-future`, Skip Inbox.
 
 **2. Helpdesk — split into actionable vs. FYI**
 
@@ -114,10 +117,11 @@ For each, check "Also apply filter to matching conversations" at creation time t
 
 **3. Newsletters / webinar marketing (largest pure-noise bucket)**
 
+✅ `newsletters-marketing` is set up and working correctly — confirmed across ~20 sampled messages (Perkopolis, Grafana, Docebo, Atlassian, AWS marketing, Meraki, Visa/Cybersource, LevelBlue), all correctly labeled with inbox skipped. Recipe for reference:
+
 ```
 from:(customerservice@perkopolis.com OR update@grafana.com OR customereducation@docebo.com OR events@docebo.com OR contactus@docebo.com OR info@e.atlassian.com OR aws-marketing-email-replies@amazon.com OR noreply@meraki.com OR donotreply@notifications.visaacceptance.com OR experts@comms.levelblue.com)
 ```
-Action: Apply new label `newsletters-marketing`, Skip Inbox.
 
 ✅ `newsletters-training` (Infosec Institute) is set up and working correctly.
 
@@ -127,6 +131,8 @@ Worth calling out: Perkopolis and Infosec Institute mail lands **three times eac
 
 ✅ `secops-github-monitoring` and ✅ `secops-phishnotify` are both set up and working correctly.
 
+⚠️ `secops-crowdstrike` — label is being applied correctly, but every sampled message (15/15) is also having its `INBOX` label removed, i.e. the live filter is set to Skip Inbox. That's the opposite of the original recommendation below, which said to keep these visible in the inbox since they're TAM/support notices worth seeing as they come in. Flagging rather than marking this ✅: was skipping inbox an intentional call on your end, or should the filter be edited to stop skipping inbox? Original recipe for reference:
+
 ```
 from:(TAM-Team-noreply@crowdstrike.com OR do-not-reply@crowdstrike.com)
 ```
@@ -134,12 +140,16 @@ Action: Apply new label `secops-crowdstrike`. Keep in inbox — these are TAM/su
 
 **5. HR / HiBob notices**
 
+✅ `hr-hibob` is set up and working correctly — confirmed across 15 sampled messages, all labeled with inbox skipped as intended. (A few offboarding-notice messages also carry `secops-offboarding` at the same time — that overlap looks intentional/harmless, not a problem.) Recipe for reference:
+
 ```
 from:no-reply@hibob.com
 ```
 Action: Apply new label `hr-hibob`, Skip Inbox. FYI confirmations (time-off approvals, scheduled reports) — nothing actionable once sent.
 
 **6. Auto-generated meeting notes**
+
+✅ `meetings-notes` is set up and working correctly — confirmed across 15 sampled messages, all labeled with inbox skipped as intended. Recipe for reference:
 
 ```
 from:gemini-notes@google.com
