@@ -288,11 +288,53 @@ inside the jail (see below) and reached through the SSH tunnel.
 
 ## 9. The opencode-web script
 
-`freebsd/opencode-web` (in this repo) starts opencode in web mode bound to
-`127.0.0.1` inside the jail — never on the jail's real address. Copy it into
-`/home/opencode/` inside the jail (e.g. via `scp`/`pscp`, or paste it in with
-an editor over an SSH session), make it executable, and run it after logging
-in as `opencode`.
+Create a small script that starts opencode in web mode bound to `127.0.0.1`
+inside the jail — never on the jail's real address — so it's only ever
+reachable through an SSH tunnel. From the jail host, write it straight into
+the jail's filesystem with a heredoc:
+
+```
+cat > /jails/opencode/home/opencode/opencode-web <<'EOF'
+#!/bin/sh
+#
+# opencode-web - start opencode in web mode, bound to loopback only.
+#
+# Run this INSIDE the jail, logged in as the 'opencode' user. It listens
+# on 127.0.0.1 so it's only reachable through an SSH tunnel, never
+# directly on the jail's network address (198.18.51.27).
+#
+# --- PuTTY setup (do this once, on your workstation) ---
+#   Session -> Host Name: 198.18.51.27   Port: 22
+#   Connection -> SSH -> Auth -> Credentials: your private key
+#       (or leave blank to use the 'opencode' user's password)
+#   Connection -> SSH -> Tunnels:
+#       Source port: 9090   Destination: 127.0.0.1:9090   Type: Local
+#       -> click "Add"
+#   Session -> Saved Sessions: give it a name (e.g. "opencode-jail") -> Save
+#
+# --- Each time you want to use it ---
+#   1. Open PuTTY, load the saved session, connect, log in as 'opencode'.
+#   2. Run this script inside that session:  ./opencode-web
+#   3. On your workstation, open a browser to: http://localhost:9090
+#
+# If you use a different port than 9090, make sure the PuTTY tunnel's
+# source/destination ports match what you pass as an argument below.
+#
+# Usage:
+#   ./opencode-web           # listen on default port 9090
+#   ./opencode-web 9191      # listen on a different port (update PuTTY tunnel too)
+
+set -eu
+
+PORT="${1:-9090}"
+
+export PATH="$HOME/.bun/bin:$PATH"
+
+exec opencode web --port "$PORT" --hostname 127.0.0.1
+EOF
+chmod +x /jails/opencode/home/opencode/opencode-web
+chown opencode:opencode /jails/opencode/home/opencode/opencode-web
+```
 
 The script's header comments include the PuTTY tunnel configuration needed
 to reach the resulting web UI from a local browser. In short: a saved PuTTY
