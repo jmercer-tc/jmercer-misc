@@ -62,6 +62,7 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 | `confluence-digest` | Yes | Weekly Confluence content digest |
 | `secops-netops` | Yes | Meraki network device notifications (moved out of `newsletters-marketing` — networking gear, not marketing) |
 | `incidentio-alerts` | Yes | incident.io platform notifications — its own dedicated label since Jim expects this system to grow in importance |
+| `meetings-invites` | Yes | Google Calendar invitations, updates, and cancellations from any organizer — the single biggest volume source found across the whole review |
 
 ## Update: "already working" labels turned out to be Thunderbird-dependent, not real Gmail filters
 
@@ -185,6 +186,15 @@ Action: add `OR from:no-reply@siebert.com` to the existing `hr-stocks` filter's 
 from:gemini-notes@google.com
 ```
 Action: Apply new label `meetings-notes`, Skip Inbox. One of these per standup/meeting — useful as reference, not something that needs inbox space.
+
+**6a. Calendar invites, updates, and cancellations — biggest single volume source in the whole inbox**
+
+Every Google Calendar invitation, update, and cancellation email — from any organizer, internal or external — currently lands straight in the inbox with no filter touching it at all. This isn't from one sender like everything else in this doc; it's dozens of different colleagues and vendors (Michael Sahai's recurring 1:1s, CrowdStrike/Teleport/Radware demos, Town Halls, incident.io incident-response invites, All-Hands, etc.), all sharing the same Gmail subject conventions: `Invitation:`, `Updated invitation:`, `Updated invitation with note:`, `Canceled event:`, `Canceled event with note:` (and the `Cancelled` UK spelling variant Google also uses). Confirmed via a subject-based search that this pattern alone accounts for the largest chunk of inbox volume found in this whole review — Gmail's estimate capped at "201."
+
+```
+subject:("Invitation:" OR "Updated invitation:" OR "Canceled event:" OR "Cancelled event:")
+```
+Action: apply new label `meetings-invites`, Skip Inbox. Since Gmail's search treats the quoted phrases as word-matches rather than exact substrings, this query also catches the "with note" and recurring-series variants (confirmed against live results) without needing extra clauses. Per Jim's stated preference this pass: pull these out of the inbox entirely and rely on Google Calendar itself (not the inbox) for tracking upcoming meetings and RSVPs — the label is there to keep the raw notification emails searchable/reference-able, not for active monitoring.
 
 **7. Billing / invoices**
 
@@ -339,7 +349,7 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 | `hr-` | HR/compensation/timesheet/equity systems (HiBob, Tempo, `hr-stocks` for Carta + Siebert) |
 | `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
 | `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
-| `meetings-` | Auto-generated meeting artifacts (Gemini notes) |
+| `meetings-` | Meeting-related mail — auto-generated artifacts (`-notes`: Gemini/Fellow) and calendar invitations/updates/cancellations (`-invites`) |
 | `misc-` | Catchall categories that don't warrant their own prefix (e.g. `misc-invoices` for billing/invoice mail across vendors) |
 | `lists-` | Genuine opt-in mailing lists/working groups (IT-ISAC) |
 | `wavelo-` | Internal Wavelo-specific labels (e.g. `wavelo-concerns`) |
