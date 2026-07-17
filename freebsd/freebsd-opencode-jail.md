@@ -130,7 +130,7 @@ FreeBSD/Ubuntu guests on them — the toolchain is:
   works against both FreeBSD and Ubuntu targets)
 - **curl + jq** for any direct Proxmox REST API calls outside of OpenTofu
 
-`scripts/bootstrap-jail-packages.sh` (in this repo) installs all of this as
+`freebsd/bootstrap-jail-packages.sh` (in this repo) installs all of this as
 root, once, inside the jail:
 
 ```
@@ -208,7 +208,7 @@ inside the jail (see below) and reached through the SSH tunnel.
 
 ## 9. The opencode-web script
 
-`scripts/opencode-web` (in this repo) starts opencode in web mode bound to
+`freebsd/opencode-web` (in this repo) starts opencode in web mode bound to
 `127.0.0.1` inside the jail — never on the jail's real address. Copy it into
 `/home/opencode/` inside the jail (e.g. via `scp`/`pscp`, or paste it in with
 an editor over an SSH session), make it executable, and run it after logging
