@@ -223,7 +223,8 @@ A few notes on why each package is there:
 - `python311` / `py311-pip` — Ansible's own runtime dependency, and useful
   generally for scripting/collections that need extra Python libs.
 - `bash` — many Ansible tasks and ops scripts assume bash even though the
-  jail's default shell is `/bin/sh`.
+  jail's default shell is `/bin/sh`; it's also set as the `opencode` user's
+  own login shell in step 6.
 - `ripgrep` — commonly used by terminal coding agents for fast in-repo
   search.
 - `tmux` — handy for keeping long-running provisioning jobs alive across
@@ -231,18 +232,21 @@ A few notes on why each package is there:
 - `gmake` / `pkgconf` — basic build tooling, in case anything needs to
   compile a small helper.
 
-Run this after step 4 (installing `linux-rl9`) and before or after creating
-the `opencode` user — order doesn't matter since these are jail-wide
-packages, not user-specific installs.
+Run this after step 4 (installing `linux-rl9`) and **before** creating the
+`opencode` user in step 6, since that step sets the user's login shell to
+the `bash` package installed here — the shell binary needs to already exist
+before `pw useradd` points a user at it.
 
 ## 6. Create the opencode user
 
 The jail's own users/groups are ordinary FreeBSD ones (the `linux-rl9` tree
-is only the Linux ABI support layer, not a separate OS):
+is only the Linux ABI support layer, not a separate OS). Use `bash` (from
+step 5, installed as a native FreeBSD package at `/usr/local/bin/bash`) as
+the login shell rather than the default `/bin/sh`:
 
 ```
 jexec opencode pw groupadd opencode
-jexec opencode pw useradd opencode -m -d /home/opencode -s /bin/sh \
+jexec opencode pw useradd opencode -m -d /home/opencode -s /usr/local/bin/bash \
     -c "opencode service/cli user"
 jexec opencode passwd opencode
 ```
@@ -259,8 +263,10 @@ jexec -U opencode opencode /compat/linux/bin/bash -c \
     "curl -fsSL https://opencode.ai/install | bash"
 ```
 
-Add Bun's bin directory to the user's shell profile
-(`/home/opencode/.profile` for `/bin/sh`):
+Add Bun's bin directory to the user's shell profile. Since the login shell
+is now bash, a login shell (which is what an SSH session gives you) reads
+`~/.bash_profile` first, falling back to `~/.profile` if that doesn't
+exist — either works, so `/home/opencode/.profile` is fine to keep using:
 
 ```
 export PATH="$HOME/.bun/bin:$PATH"
@@ -347,7 +353,7 @@ Connection → SSH → Tunnels.
 **CLI / TUI mode**, from the jail host:
 
 ```
-jexec -U opencode opencode /bin/sh
+jexec -U opencode opencode /usr/local/bin/bash
 opencode
 ```
 
