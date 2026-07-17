@@ -300,7 +300,7 @@ reachable through an SSH tunnel. From the jail host, write it straight into
 the jail's filesystem with a heredoc:
 
 ```
-cat > /jails/opencode/home/opencode/opencode-web <<'EOF'
+cat > /jails/opencode/home/opencode/opencode-web <<'__EOF__'
 #!/bin/sh
 #
 # opencode-web - start opencode in web mode, bound to loopback only.
@@ -337,7 +337,7 @@ PORT="${1:-9090}"
 export PATH="$HOME/.bun/bin:$PATH"
 
 exec opencode web --port "$PORT" --hostname 127.0.0.1
-EOF
+__EOF__
 chmod +x /jails/opencode/home/opencode/opencode-web
 chown opencode:opencode /jails/opencode/home/opencode/opencode-web
 ```
