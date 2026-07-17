@@ -4,32 +4,34 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 
 **Limitation:** the Gmail connector I have access to can read your inbox and labels, but it can't create actual Filters (Settings > Filters and Blocked Addresses) — that API isn't exposed to me. So below are ready-to-paste filter recipes: the exact search string for the "Has the words" field, the label to apply, and whether to skip the inbox.
 
-**Naming convention:** labels use a `category-detail` prefix (`hr-`, `helpdesk-`, `secops-`, etc.) so they sort together alphabetically in an IMAP folder list. This applies both to new labels and to a set of suggested renames for your existing ones, below.
+**Naming convention:** labels use a `category-detail` prefix (`hr-`, `helpdesk-`, `secops-`, etc.) so they sort together alphabetically in an IMAP folder list. This applies both to new labels and to the renames already applied to your existing ones, below.
 
 ## Label map: existing, renamed, and new
 
-**Existing labels — recommend renaming for consistent sort order**
+**Existing labels — renamed for consistent sort order**
 
-| Current name | Suggested rename | Why |
+✅ All done and confirmed live:
+
+| Old name | New name | Note |
 |---|---|---|
-| `alienvault` | `secops-alienvault` | Security vendor feed — groups with your other `secops-` labels |
-| `nessus` | `secops-nessus` | Same |
-| `recorded-future` | `secops-recorded-future` | Same |
-| `ice-aws` | `secops-ice-aws` | Same |
-| `hacker1` | `secops-hackerone` | Same, and corrects the truncated vendor name |
-| `github` | `secops-github` | Dev/ops repo notifications tied to your team |
-| `carta` | `hr-carta` | Tracks employee stock/stock options — groups with `hr-hibob` as a compensation/benefits system |
-| `secops-radware` | *(no change)* | Already fits the convention |
-| `secops-misc` / `secops-offboarding` / `secops-domains` / `secops-maint` | *(no change)* | Already fit |
+| `alienvault` | `secops-alienvault` | |
+| `nessus` | `secops-nessus` | |
+| `recorded-future` | `secops-recorded-future` | |
+| `ice-aws` | `secops-ice-aws` | |
+| `hacker1` | `secops-hacker1` | Renamed to `secops-hacker1` rather than the `secops-hackerone` originally suggested — functionally identical, just keeps the truncated vendor name. No action needed unless you want it fully spelled out. |
+| `github` | `secops-github` | |
+| `carta` | `hr-carta` | |
+
+`secops-radware`, `secops-misc`, `secops-offboarding`, `secops-domains`, and `secops-maint` already fit the convention and were left as-is.
 
 **Existing labels — decided**
 
-| Current name | Action | Note |
+| Current name | Action | Status |
 |---|---|---|
-| `info` | **Delete** | Empty, no longer needed. |
-| `concerns` | **Rename to `wavelo-concerns`** | |
-| `Archives.2020` | Leave untouched | Dated one-off archive, not a live workflow label. |
-| `jira` | **Delete** (once `secops-jira` is confirmed working) | Starting fresh with `secops-jira` as a new label/filter rather than renaming — old `jira` mail is being dropped, not migrated. |
+| `info` | Delete | ✅ Done — no longer appears in your label list. |
+| `concerns` | Rename to `wavelo-concerns` | ✅ Done — confirmed live. |
+| `Archives.2020` | Leave untouched | No change needed. |
+| `jira` | Renamed to `secops-jira` (same label, in place) | Note: this ended up as a straight rename rather than the "start fresh, drop old mail" approach discussed earlier — the label kept its same ID, so historical `jira`-labeled mail is still sitting under `secops-jira` rather than being dropped. That's fine functionally; just flagging that the old mail wasn't actually cleared out if you still want to do that separately. |
 
 **Existing labels — still unclear category, not renaming without your input**
 
@@ -37,7 +39,7 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 |---|---|
 | `misc` | Generic catch-all — could rename to `misc-general` for sort order, but not sure it's worth the churn unless you want it grouped near other `misc`-style labels. |
 
-Note: the Gmail connector I have can create labels but can't delete or rename them — that's not exposed via this API. Both of the above need a quick manual step: Settings (gear icon) → **See all settings** → **Labels** → find `info` and click **remove**; find `concerns` and click **rename**, then type `wavelo-concerns`.
+Note: the Gmail connector I have can create labels but can't delete or rename them — that's not exposed via this API, so all of the renames and the `info` deletion above were done manually via Settings → Labels. The `misc` label above is the only one still pending that same manual step, if you decide to rename it.
 
 *(The two `[Gmail]/Trash/...` entries in your label list aren't separate labels — they're just Gmail's mirror of trashed messages that happen to carry the `alienvault`/`secops-radware` label. Nothing to rename there.)*
 
