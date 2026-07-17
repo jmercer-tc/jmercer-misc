@@ -18,7 +18,6 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 | `ice-aws` | `secops-ice-aws` | Same |
 | `hacker1` | `secops-hackerone` | Same, and corrects the truncated vendor name |
 | `github` | `secops-github` | Dev/ops repo notifications tied to your team |
-| `jira` | `secops-jira` | Ticketing notifications |
 | `carta` | `hr-carta` | Tracks employee stock/stock options — groups with `hr-hibob` as a compensation/benefits system |
 | `secops-radware` | *(no change)* | Already fits the convention |
 | `secops-misc` / `secops-offboarding` / `secops-domains` / `secops-maint` | *(no change)* | Already fit |
@@ -30,6 +29,7 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 | `info` | **Delete** | Empty, no longer needed. |
 | `concerns` | **Rename to `wavelo-concerns`** | |
 | `Archives.2020` | Leave untouched | Dated one-off archive, not a live workflow label. |
+| `jira` | **Delete** (once `secops-jira` is confirmed working) | Starting fresh with `secops-jira` as a new label/filter rather than renaming — old `jira` mail is being dropped, not migrated. |
 
 **Existing labels — still unclear category, not renaming without your input**
 
@@ -83,7 +83,9 @@ These four were never real Gmail Filters (see note above) — they need to be cr
 ```
 from:jira@wiki-tucows.atlassian.net
 ```
-Action: Apply label `jira` (or `secops-jira`), Skip Inbox. Keep it as one label covering everything from Jira, including "Pending approval" mail — this is a separate system from the helpdesk approvals workflow below and doesn't need the same actionable/FYI split.
+Action: Apply label `secops-jira` (new label — starting fresh rather than reusing/renaming the old `jira` label). Skip Inbox. Keep it as one label covering everything from Jira, including "Pending approval" mail — this is a separate system from the helpdesk approvals workflow below and doesn't need the same actionable/FYI split.
+
+Since this is a clean start, don't check "Also apply filter to matching conversations" for this one — the existing `jira`-labeled mail is being deleted rather than migrated, so there's nothing old to backfill. Once `secops-jira` is confirmed working on new mail, delete the old `jira` label (and its messages, if desired) via Settings → Labels.
 
 ```
 from:notifications@github.com
