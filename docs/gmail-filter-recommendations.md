@@ -192,9 +192,9 @@ Action: Apply new label `meetings-notes`, Skip Inbox. One of these per standup/m
 Every Google Calendar invitation, update, and cancellation email — from any organizer, internal or external — currently lands straight in the inbox with no filter touching it at all. This isn't from one sender like everything else in this doc; it's dozens of different colleagues and vendors (Michael Sahai's recurring 1:1s, CrowdStrike/Teleport/Radware demos, Town Halls, incident.io incident-response invites, All-Hands, etc.), all sharing the same Gmail subject conventions: `Invitation:`, `Updated invitation:`, `Updated invitation with note:`, `Canceled event:`, `Canceled event with note:` (and the `Cancelled` UK spelling variant Google also uses). Confirmed via a subject-based search that this pattern alone accounts for the largest chunk of inbox volume found in this whole review — Gmail's estimate capped at "201."
 
 ```
-subject:("Invitation:" OR "Updated invitation:" OR "Canceled event:" OR "Cancelled event:")
+subject:("Invitation:" OR "Updated invitation:" OR "Canceled event:" OR "Cancelled event:") -from:haleym@tucowsinc.com
 ```
-Action: apply new label `meetings-invites`, Skip Inbox. Since Gmail's search treats the quoted phrases as word-matches rather than exact substrings, this query also catches the "with note" and recurring-series variants (confirmed against live results) without needing extra clauses. Per Jim's stated preference this pass: pull these out of the inbox entirely and rely on Google Calendar itself (not the inbox) for tracking upcoming meetings and RSVPs — the label is there to keep the raw notification emails searchable/reference-able, not for active monitoring.
+Action: apply new label `meetings-invites`, Skip Inbox. Since Gmail's search treats the quoted phrases as word-matches rather than exact substrings, this query also catches the "with note" and recurring-series variants (confirmed against live results) without needing extra clauses. Per Jim's stated preference this pass: pull these out of the inbox entirely and rely on Google Calendar itself (not the inbox) for tracking upcoming meetings and RSVPs — the label is there to keep the raw notification emails searchable/reference-able, not for active monitoring. The `-from:haleym@tucowsinc.com` exclusion keeps Domains Town Hall invites out of this bucket — see section 11a below, they get routed to `secops-domains` instead.
 
 **7. Billing / invoices**
 
@@ -250,6 +250,15 @@ Recurring "[ops] [SRE Status]" messages (investigating/monitoring/resolved) for 
 from:domains-sreteam@tucows.com
 ```
 Action: apply existing `secops-domains` label, Skip Inbox — including "investigating"/"monitoring" messages, not just "resolved."
+
+**11a. Domains Town Hall calendar invites — carved out of `meetings-invites` into `secops-domains`**
+
+Jim's call: the recurring Domains Town Hall invites (e.g. "Updated invitation: Domains Town Hall @ Thu 2026-07-23 11:00 - 12:00 (EDT) (Jim Mercer)") should route to `secops-domains` specifically, rather than the general `meetings-invites` bucket — grouping it with the other domains-team traffic (SRE status broadcasts above). Always sent by `haleym@tucowsinc.com`, so a sender-based filter works instead of relying on subject text:
+
+```
+from:haleym@tucowsinc.com subject:"Domains Town Hall"
+```
+Action: apply existing `secops-domains` label, Skip Inbox. To avoid this also landing in `meetings-invites` and inflating that count, exclude it from the general invites filter (see the updated recipe in section 6a: add `-from:haleym@tucowsinc.com` or `-subject:"Domains Town Hall"`).
 
 **12. Confluence digest — finally implementing the label proposed earlier in this doc**
 
