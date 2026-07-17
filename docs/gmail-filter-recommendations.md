@@ -57,7 +57,7 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 | `hr-hibob` | Yes | HiBob time-off/report notices |
 | `meetings-notes` | Yes | Auto-generated Gemini meeting notes |
 | `misc-invoices` | Yes | Billing/invoice mail generally, starting with Exact Hosting — a catchall rather than a per-vendor label, so future invoice senders can be folded in here too |
-| `tools-tempo` | Yes | Tempo timesheet reminders |
+| `hr-tempo` | Yes | Tempo timesheet reminders |
 | `lists-it-isac` | Optional | Genuine opt-in IT-ISAC AI SIG mailing list |
 | `confluence-digest` | Yes | Weekly Confluence content digest |
 
@@ -165,12 +165,12 @@ from:help@exacthosting.com
 ```
 Action: Apply new label `misc-invoices`, Skip Inbox. When another billing/invoice sender shows up later, add it to this same filter's query (`OR from:new-vendor@example.com`) rather than creating a new label.
 
-**8. Internal tools**
+**8. Timesheets**
 
 ```
 from:no-reply@tempo.io
 ```
-Action: Apply new label `tools-tempo`, Skip Inbox. Timesheet reminders — FYI only.
+Action: Apply new label `hr-tempo` (moved from the originally-suggested `tools-tempo` — timesheets fit better under the `hr-` prefix alongside HiBob/Carta), Skip Inbox. Timesheet reminders — FYI only.
 
 **9. Genuine mailing list — IT-ISAC AI SIG**
 
@@ -242,12 +242,11 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 | Prefix | Used for |
 |---|---|
 | `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, misc/offboarding/domains/maint) |
-| `hr-` | HR/compensation systems (HiBob, Carta) |
+| `hr-` | HR/compensation/timesheet systems (HiBob, Carta, Tempo) |
 | `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
 | `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
 | `meetings-` | Auto-generated meeting artifacts (Gemini notes) |
 | `misc-` | Catchall categories that don't warrant their own prefix (e.g. `misc-invoices` for billing/invoice mail across vendors) |
-| `tools-` | Internal tool notifications (Tempo) |
 | `lists-` | Genuine opt-in mailing lists/working groups (IT-ISAC) |
 | `wavelo-` | Internal Wavelo-specific labels (e.g. `wavelo-concerns`) |
 | `confluence-` | Confluence digest-style notifications |
