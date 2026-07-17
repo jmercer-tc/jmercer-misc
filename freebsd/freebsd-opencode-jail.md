@@ -84,6 +84,27 @@ bsdinstall jail /jails/opencode      # installs a base FreeBSD userland
 service jail start opencode
 ```
 
+### Start the jail automatically on reboot
+
+By default `service jail start` only starts it for the current boot. To have
+it come up automatically after a reboot, add to `/etc/rc.conf`:
+
+```
+sysrc jail_enable="YES"
+sysrc jail_list="opencode"
+```
+
+`jail_enable="YES"` turns on the jail subsystem at boot. `jail_list` isn't
+strictly required with the `jail.conf` format — if omitted, FreeBSD defaults
+to starting every jail defined in `/etc/jail.conf` — but setting it
+explicitly to `opencode` is worth doing anyway: it means if you ever define
+other jails in the same `jail.conf` later, they won't autostart unless you
+deliberately add them to the list too.
+
+No changes are needed for Linuxulator itself — `linux_enable="YES"` (from
+step 2) already persists in `/etc/rc.conf`, and FreeBSD's boot ordering
+starts the `linux` compat service before the jail service on its own.
+
 ## 4. Install the Linux userland inside the jail
 
 ```
