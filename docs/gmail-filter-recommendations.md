@@ -20,7 +20,7 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 | `ice-aws` | `secops-ice-aws` | |
 | `hacker1` | `secops-hacker1` | Renamed to `secops-hacker1` rather than the `secops-hackerone` originally suggested — functionally identical, just keeps the truncated vendor name. No action needed unless you want it fully spelled out. |
 | `github` | `secops-github` | |
-| `carta` | `hr-carta` | |
+| `carta` | `hr-stocks` | Renamed a second time, from `hr-carta` — Jim's call to frame it as the equity/stock-plan bucket rather than a single-vendor label, since Siebert mail (stock-plan-related) is being folded in below. |
 
 `secops-radware`, `secops-misc`, `secops-offboarding`, `secops-domains`, and `secops-maint` already fit the convention and were left as-is.
 
@@ -156,6 +156,15 @@ from:no-reply@hibob.com
 ```
 Action: Apply new label `hr-hibob`, Skip Inbox. FYI confirmations (time-off approvals, scheduled reports) — nothing actionable once sent.
 
+**5a. HR / Stocks — Carta (renamed) + Siebert (new fold-in)**
+
+`hr-stocks` (renamed from `hr-carta`, see label map above) already has a working filter for Carta mail. Folding Siebert's stock-plan mail in as a second sender on the same label rather than giving it its own, since it's the same functional bucket:
+
+```
+from:(carta.com OR no-reply@siebert.com)
+```
+Action: add `OR from:no-reply@siebert.com` to the existing `hr-stocks` filter's query. Skip Inbox, matching Carta's existing behavior. (The exact Carta sending address wasn't independently re-verified this pass — swap in whatever address the current live filter actually uses if it differs from `carta.com`.)
+
 **6. Auto-generated meeting notes**
 
 ✅ `meetings-notes` is set up and working correctly — confirmed across 15 sampled messages, all labeled with inbox skipped as intended. Recipe for reference:
@@ -240,9 +249,10 @@ Action: update the existing `meetings-notes` filter to add `OR from:no-reply@fel
 
 **Lower-priority, noted but not acted on:**
 
-- `no-reply@siebert.com` — recurring holiday/newsletter-style mail, low-ish volume. Candidate for folding into `newsletters-marketing` if it keeps showing up.
 - `support-noreply@meraki.com` — a second Meraki sending address; the existing `newsletters-marketing` filter only lists `noreply@meraki.com`. Worth adding as an `OR` if this address turns out to be sending anything beyond the odd one-off.
 - `info.blazemeter@perforce.com` — only ~2 instances seen, too low-volume to bother with a filter yet.
+
+(`no-reply@siebert.com` was also found here — Jim's call was to fold it into `hr-stocks` rather than `newsletters-marketing`; see section 5a above.)
 
 ## The AlienVault/LevelBlue fix (low priority, do whenever)
 
@@ -306,7 +316,7 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 | Prefix | Used for |
 |---|---|
 | `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, misc/offboarding/domains/maint) |
-| `hr-` | HR/compensation/timesheet systems (HiBob, Carta, Tempo) |
+| `hr-` | HR/compensation/timesheet/equity systems (HiBob, Tempo, `hr-stocks` for Carta + Siebert) |
 | `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
 | `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
 | `meetings-` | Auto-generated meeting artifacts (Gemini notes) |
