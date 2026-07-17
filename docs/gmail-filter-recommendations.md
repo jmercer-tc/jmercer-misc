@@ -131,12 +131,12 @@ Worth calling out: Perkopolis and Infosec Institute mail lands **three times eac
 
 ✅ `secops-github-monitoring` and ✅ `secops-phishnotify` are both set up and working correctly.
 
-⚠️ `secops-crowdstrike` — label is being applied correctly, but every sampled message (15/15) is also having its `INBOX` label removed, i.e. the live filter is set to Skip Inbox. That's the opposite of the original recommendation below, which said to keep these visible in the inbox since they're TAM/support notices worth seeing as they come in. Flagging rather than marking this ✅: was skipping inbox an intentional call on your end, or should the filter be edited to stop skipping inbox? Original recipe for reference:
+✅ `secops-crowdstrike` is set up and working correctly — confirmed across 15 sampled messages, all labeled with inbox skipped. Note: this overrides the original recipe below, which had recommended keeping these in the inbox — Jim's call was to route them straight to the label folder instead, so skip inbox is the confirmed/intended behavior going forward. Recipe (updated):
 
 ```
 from:(TAM-Team-noreply@crowdstrike.com OR do-not-reply@crowdstrike.com)
 ```
-Action: Apply new label `secops-crowdstrike`. Keep in inbox — these are TAM/support notices worth seeing as they come in, just worth a dedicated label.
+Action: Apply new label `secops-crowdstrike`, Skip Inbox.
 
 **5. HR / HiBob notices**
 
