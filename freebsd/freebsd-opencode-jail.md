@@ -98,16 +98,29 @@ it come up automatically after a reboot, add to `/etc/rc.conf`:
 
 ```
 sysrc jail_enable="YES"
-sysrc jail_list="opencode"
 ```
+
+> **This host already has other jails in `jail_list`.** Do NOT run
+> `sysrc jail_list="opencode"` — the `=` form *overwrites* the whole
+> variable and would drop every jail name already in there, so those
+> jails would silently stop autostarting on the next reboot. Check what's
+> there first, then append:
+>
+> ```
+> sysrc jail_list          # see the current value before changing anything
+> sysrc jail_list+="opencode"
+> ```
+>
+> `sysrc`'s `+=` form appends to the existing space-separated list instead
+> of replacing it.
 
 `jail_enable="YES"` turns on the jail subsystem at boot. `jail_list` isn't
 strictly required with the `jail.conf` format — if omitted, FreeBSD defaults
 to starting every jail defined across `/etc/jail.conf` and everything it
-`.include`s from `/etc/jail.conf.d/*.conf` — but setting it explicitly to
-`opencode` is worth doing anyway: it means if you (or whoever else manages
-this host) add other jails under `/etc/jail.conf.d/` later, they won't
-autostart unless deliberately added to the list too.
+`.include`s from `/etc/jail.conf.d/*.conf` — but since this host already
+uses `jail_list` explicitly (rather than relying on the default), `opencode`
+needs to be added to that existing list rather than left out, or it won't
+autostart at all.
 
 No changes are needed for Linuxulator itself — `linux_enable="YES"` (from
 step 2) already persists in `/etc/rc.conf`, and FreeBSD's boot ordering
