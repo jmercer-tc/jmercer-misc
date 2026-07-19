@@ -373,13 +373,59 @@ surface exposed on the network.
 
 ## Known rough edges
 
-- Bun has no official native FreeBSD support; this whole setup depends on
-  the Linuxulator + a Linux userland (`linux-rl9`/`linux-c7`) rather than a
-  true native build.
-- The FreeBSD `lang/bun` port exists but is still experimental, with
+- **Confirmed blocker: opencode hangs permanently on any real network I/O
+  under this Linuxulator setup.** This is not a jail misconfiguration —
+  it's a genuine gap in FreeBSD's Linuxulator syscall translation.
+  Symptom: opencode starts fine and looks normal, then hangs indefinitely
+  (no error, no output) the moment it does anything involving a real
+  network response. This reproduces identically on two unrelated
+  operations — the auth/login token exchange, and an ordinary chat
+  request — so it isn't specific to one code path. `procstat`/`dmesg` on
+  the jail host show every opencode thread parked in `linux_sys_futex`
+  except the event-loop thread sitting in `kqueue_scan`, plus this
+  telltale `dmesg` line:
+
+  ```
+  linux: jid 3 pid 40387 (Worker): syscall preadv2 not implemented
+  ```
+
+  `sockstat` confirms the TCP connections themselves complete fine (both
+  land on Cloudflare-fronted `:443` endpoints, almost certainly the Zen
+  API) — the hang happens *after* the request goes out, while Bun's I/O
+  layer is trying to read the response back, at the exact point it needs
+  a `preadv2` call the Linuxulator doesn't implement. There's no jail-side
+  fix: not `jail.conf`, not a `sysctl`, not switching between `linux-rl9`
+  and `linux-c7`. **As of this writing, opencode running under
+  Bun-via-Linuxulator — the whole approach this guide documents — is not
+  usable for any workload that makes real outbound requests, which is
+  effectively all of them.**
+
+- **Untested next step: native `lang/bun` instead of Bun-via-Linuxulator.**
+  Bun landed its own native FreeBSD x86_64/aarch64 build target upstream
+  (`oven-sh/bun` PR #29676 — host clang +
+  `--target=x86_64-unknown-freebsd14.3` cross-compile with WebKit
+  prebuilts), closing Bun's long-standing FreeBSD tracking issue.
+  FreeBSD's `lang/bun` port has picked this up and is being actively
+  updated (1.3.14 as of May 2026) — a materially different situation from
+  the older `lang/bun` referenced below, which was experimental and
+  prone to `SIGILL` crashes. A native Bun build never goes through the
+  Linuxulator at all, so the `preadv2` gap above wouldn't apply. Worth
+  trying `pkg install bun` (or building `lang/bun` from ports for a newer
+  version) and running opencode against that native binary instead of the
+  `linux-rl9`-hosted one, **before** treating the Linuxulator route as the
+  final architecture. Not yet verified against opencode specifically —
+  this is the next thing to test, not a confirmed fix.
+
+- Bun has no *official* native FreeBSD support as of the last stable
+  release channel; this guide's setup depends on the Linuxulator + a
+  Linux userland (`linux-rl9`/`linux-c7`) rather than a true native
+  build. See the native `lang/bun` note above for why that may be
+  changing.
+- The FreeBSD `lang/bun` port historically was experimental, with
   reports of `SIGILL` crashes on some hardware — hence installing Bun
   inside the Linux userland via its own install script instead of trying
-  the native port.
+  the native port. See above: this may no longer be the right call given
+  Bun's new native FreeBSD build target.
 - Upstream opencode has hardcoded platform checks that only allow
   `linux`/`darwin`/`win32`, tracked in the project's GitHub issues for
   native FreeBSD support (not yet merged as of this writing).
@@ -396,3 +442,213 @@ surface exposed on the network.
   Linuxulator specifically — it applies to `nullfs` in general — but it's
   an easy trap to hit once you start sharing config between the host and
   this jail.
+
+- **`jexec <jail> mount` cannot be used to verify `mount.fstab`/`mount.devfs`
+  worked.** By default `enforce_statfs` is `2`, which restricts what a
+  jailed process can see via `statfs()` (and therefore `mount`, `df`, etc.)
+  to just the single mount point containing the jail's own root —
+  everything mounted underneath that (the `devfs`/`linprocfs`/`linsysfs`/
+  `fdescfs`/`tmpfs` compat mounts included) is invisible from inside the
+  jail, even when every one of those mounts succeeded correctly. Running
+  `jexec opencode mount | grep compat` will return **empty every single
+  time**, regardless of whether the mounts are actually there — it's not
+  a signal of failure, it's just what `enforce_statfs=2` does by design.
+  This looks exactly like a broken `mount.fstab`, and it isn't one.
+
+  To actually check whether the compat mounts are in place, run `mount`
+  on the **host**, not through `jexec`:
+
+  ```
+  mount | grep compat
+  ```
+
+  From the host you'll see (for a correctly-configured jail):
+
+  ```
+  devfs on /jails/opencode/compat/linux/dev (devfs)
+  linprocfs on /jails/opencode/compat/linux/proc (linprocfs, local)
+  linsysfs on /jails/opencode/compat/linux/sys (linsysfs, local)
+  fdescfs on /jails/opencode/compat/linux/dev/fd (fdescfs)
+  tmpfs on /jails/opencode/compat/linux/dev/shm (tmpfs, local)
+  ```
+
+  (You'll likely also see a second, separate set of `linprocfs`/`linsysfs`/
+  `devfs` entries at plain `/compat/linux/...` with no `/jails/opencode`
+  prefix — those belong to the *host's own* Linuxulator setup from step 2,
+  not this jail, and are unrelated.)
+
+  If a config change to `jail.conf`/the fstab file doesn't seem to be
+  taking effect, restart the jail (`service jail restart <jail>`) — since
+  `mount.fstab`/`mount.devfs` are only evaluated at jail create/start —
+  and then re-check with the host-side `mount`, not `jexec ... mount`.
+
+## Addendum: completely removing the jail
+
+Full teardown, run as root on the jail host. Roughly the reverse order of
+setup, with a couple of extra checks since several of this guide's own
+gotchas (nullfs, wedged Bun/opencode processes, `enforce_statfs` hiding
+mount state) can also get in the way of a clean removal.
+
+### 1. Stop the jail
+
+```
+service jail stop opencode
+```
+
+This tears down the `mount.fstab`/`mount.devfs` entries (the `devfs`/
+`linprocfs`/`linsysfs`/`fdescfs`/`tmpfs` compat mounts under
+`/jails/opencode/compat/linux`) the same way the jail framework mounted
+them at start — see the `enforce_statfs`/`mount` note above for why you
+can't check this via `jexec`. Verify from the **host**:
+
+```
+mount | grep opencode
+```
+
+This should return nothing. If something is still mounted, the likely
+cause is a `nullfs` mount you set up per the "Known rough edges" section
+above (e.g. sharing `~/.local/share/opencode` between host and jail) —
+unmount it explicitly:
+
+```
+umount /jails/opencode/<mount point>
+```
+
+If `service jail stop` hangs or a mount reports `busy`, it's very likely
+the known `preadv2` hang: a wedged opencode/Bun `Worker` process sitting
+in `linux_sys_futex` won't release cleanly. Check what's still running in
+the jail first, rather than reaching straight for `umount -f`:
+
+```
+jexec opencode ps aux
+```
+
+Kill the hung process, then retry `service jail stop`. If it truly won't
+release, unmount the compat filesystems manually, **innermost first**
+(the reverse of the order they're listed in `opencode.fstab`):
+
+```
+umount /jails/opencode/compat/linux/dev/fd
+umount /jails/opencode/compat/linux/dev/shm
+umount /jails/opencode/compat/linux/dev
+umount /jails/opencode/compat/linux/proc
+umount /jails/opencode/compat/linux/sys
+```
+
+Only use `umount -f` as a genuine last resort — per the `nullfs`/
+`_vn_lock` warning earlier in this doc, forcing things can wedge the host
+kernel itself, at which point a reboot is the only way out. A normal
+`umount` after killing the offending process should be enough here.
+
+### 2. Remove the jail from autostart (`rc.conf`)
+
+`jail_list` was appended to with `+=` when this jail was added, specifically
+so it wouldn't clobber other jails already in the list (see step 3 of the
+setup instructions above) — removal deserves the same care in reverse.
+Check the current value first, don't hand-edit blindly:
+
+```
+sysrc jail_list
+```
+
+Then remove just the `opencode` entry, leaving every other jail name
+intact:
+
+```
+sysrc jail_list-="opencode"
+```
+
+(`sysrc`'s `-=` form removes a single entry from a space-separated list
+without touching the rest — the mirror of the `+=` used to add it.)
+
+Leave `jail_enable="YES"` and `linux_enable="YES"` alone — both are
+host-wide settings almost certainly still needed by other jails and/or the
+host's own Linuxulator setup from step 2, not specific to this one jail.
+
+### 3. Remove the host IP alias
+
+If `198.18.51.27` isn't used by anything else on this host, remove the
+persistent alias from `/etc/rc.conf`:
+
+```
+sysrc -x ifconfig_em0_alias0
+```
+
+(`-x` deletes the variable outright, rather than setting it to something.)
+Then tear down the live alias without waiting for a reboot:
+
+```
+ifconfig em0 -alias 198.18.51.27
+```
+
+Skip this step if the same interface/alias name is shared with another
+jail or service on this host — check before removing.
+
+### 4. Remove the jail.conf.d files
+
+```
+rm /etc/jail.conf.d/opencode.conf
+rm /etc/jail.conf.d/opencode.fstab
+```
+
+Since this host's `/etc/jail.conf` only does
+`.include "/etc/jail.conf.d/*.conf";` rather than defining jails directly
+(see step 3 of the setup instructions above), deleting these two files is
+enough — there's nothing referencing `opencode` left in the main
+`/etc/jail.conf` to clean up separately.
+
+### 5. Remove the jail's root filesystem
+
+First confirm whether `/jails/opencode` is a plain directory or its own
+ZFS dataset. This setup was created via `mkdir -p /jails/opencode` +
+`bsdinstall jail /jails/opencode` into that plain path, so it's almost
+certainly just a directory on whatever filesystem `/jails` lives on, not
+a separate dataset — but confirm rather than assume:
+
+```
+zfs list -H -o name /jails/opencode 2>/dev/null
+```
+
+If that prints a dataset name, destroy it that way instead of `rm -rf`:
+
+```
+zfs destroy -r zroot/jails/opencode   # adjust dataset name to match
+```
+
+If it's a plain directory (the expected case here), check for
+immutable/system flags before attempting removal. `rm -rf` fails partway
+through — leaving a half-deleted tree behind — if it hits a file with
+`schg`/`sappnd`/`sunlnk`/etc. set, which can happen on parts of a base
+install or a `linux-rl9`/`linux-c7` userland depending on how it was
+built:
+
+```
+find /jails/opencode -flags +schg,sappnd,uappnd,uunlnk,sunlnk 2>/dev/null
+```
+
+If that lists anything, clear the flags recursively first — safe here
+since the whole tree is being deleted regardless:
+
+```
+chflags -R noschg /jails/opencode
+```
+
+Then remove the tree:
+
+```
+rm -rf /jails/opencode
+```
+
+### 6. Sanity check
+
+```
+jls                                      # opencode should no longer be listed
+mount | grep opencode                    # should be empty
+ls /etc/jail.conf.d/ | grep opencode      # should be empty
+grep opencode /etc/rc.conf                # should return nothing
+```
+
+Together these confirm removal at every layer this guide touched: jail no
+longer running, no leftover compat/nullfs mounts, no leftover
+`jail.conf.d` files, no leftover `rc.conf` state (`jail_list` entry, IP
+alias), and the filesystem itself gone.
