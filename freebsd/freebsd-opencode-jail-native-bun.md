@@ -467,7 +467,7 @@ is already on `PATH` via `/usr/share/skel/dot.profile`), in which case section 4
 `.bash_profile` addition of `~/.bun/bin` to `PATH` becomes unnecessary (but harmless — it
 just won't exist) rather than required.
 
-### 6c-i. Blocking build failure: `zig obj` → `error: FileNotFound` **[unresolved]**
+### 6c-i. Blocking build failure: `zig obj` → `error: FileNotFound` **[root cause found, fix in progress]**
 
 `make build` (and the combined `make install clean`) both reproducibly fail during bun's own
 internal build step, not the ports dependency stage. Bun's build shells out to a bootstrap
@@ -476,43 +476,75 @@ cross-compile `bun-zig.{0..7}.o` via `zig build obj`, targeting
 `-Dtarget=x86_64-freebsd.14.3-none` with `-Dfreebsd_sysroot=/` and a generated libc descriptor
 file. The ninja output shows a bare `error: FileNotFound` (no path given) immediately followed
 by `FAILED: [code=1] bun-zig.0.o ... bun-zig.7.o` and `ninja: build stopped: subcommand
-failed.` Confirmed reproducible: happened identically on a fresh `make clean` +
-`install-missing-packages` + `make build` re-run, ruling out stale work-directory state as
-the cause.
+failed.` Confirmed reproducible across a clean `make clean` + `install-missing-packages` +
+`make build` re-run, ruling out stale work-directory state.
 
-Checked and ruled out:
-- Not a leftover-interactive-build / stale-`work/`-directory artifact (recurred after a clean
-  re-run).
-- Not the same failure as upstream oven-sh/bun issue
-  [#25756](https://github.com/oven-sh/bun/issues/25756) — that one is Arch Linux, a debug
-  build, and a different error message shape; it referenced an older issue (#10233) and
-  didn't resolve with a fix, just closed with a "docs" label. Dead end.
+Ruled out:
+- Stale/interrupted `work/`-directory state (recurred after a clean re-run).
+- Upstream oven-sh/bun issue [#25756](https://github.com/oven-sh/bun/issues/25756) — different
+  OS (Arch Linux), different error shape, unresolved/closed as "docs". Not the same bug.
+- **FreeBSD 14.3-vs-15.x sysroot mismatch** (the zig target is hardcoded to
+  `x86_64-freebsd.14.3-none`, while this jail is actually `15.1-RELEASE-p1`, confirmed via
+  `freebsd-version`). The generated `build/release/freebsd-libc.txt` only lists generic paths
+  (`/usr/include`, `/usr/lib`) with nothing 14.3-version-specific baked in, so this dead-ends
+  too — not the cause.
 
-Leading hypothesis, not yet tested: **FreeBSD release mismatch.** The zig cross-compile
-target is hardcoded to `x86_64-freebsd.14.3-none`, but this jail's `pkg` ABI was observed
-earlier (during the `latest`-repo troubleshooting) as `FreeBSD:15:amd64` — i.e. the jail may
-actually be running FreeBSD 15.x while bun's build assumes a 14.3 sysroot layout. A
-version-specific path (crt object, header dir, or the dynamic linker) that moved or got
-renamed between 14.x and 15.x could plausibly produce a bare, path-less `FileNotFound` like
-this.
+**Actual root cause, confirmed via `truss -f` on the exact `zig build obj` invocation:** the
+bootstrap Zig binary the port downloads
+(`oven-zig/bootstrap-x86_64-linux-musl/zig`) is a **Linux** ELF binary, not FreeBSD. It runs at
+all because FreeBSD's kernel-level Linux ABI translation is apparently already active on this
+host (host-wide kernel module, most likely left loaded from `.27`'s earlier Linuxulator setup —
+kernel modules aren't per-jail, so once loaded they stay active for every jail on rep-laptop
+regardless of that jail's own intended design). The truss log shows the translated `linux_*`
+syscalls succeeding for basic startup (mmap, arch_prctl, etc.), but then:
 
-Next diagnostic steps (not yet run):
-
-```sh
-# confirm actual release running in the jail
-jexec opencode-fbsd2 freebsd-version
-jexec opencode-fbsd2 uname -a
-
-# find and inspect the libc descriptor zig's --libc flag points at
-jexec opencode-fbsd2 find /usr/ports/lang/bun/work -iname 'freebsd-libc.txt'
-jexec opencode-fbsd2 cat <path-from-above>
+```
+linux_open("/proc/sys/vm/overcommit_memory",0x0,00) ERR#-2 'No such file or directory'
+linux_open("/sys/kernel/mm/transparent_hugepage/enabled",0x0,00) ERR#-2 'No such file or directory'
+linux_readlink("/proc/self/exe",0x7fffffffa430,4096) ERR#-2 'No such file or directory'
 ```
 
-The `freebsd-libc.txt` file should list the include dirs, crt object paths, and dynamic
-linker path zig expects on the target sysroot — check whether every path it names actually
-exists inside the jail. If the jail is genuinely 15.x and something in that list is
-14.3-specific, that's the fix target (likely a `-Dfreebsd_sysroot`/libc-file override, or a
-patched port, rather than something fixable from the jail side alone).
+(Note: truss reports Linux-ABI-translated syscall failures with a **negative** error code,
+`ERR#-2`, not the `ERR#2` used for native BSD syscalls — easy to miss with a naive grep.)
+
+This jail deliberately has no `linprocfs`/`linsysfs` mounted (the whole point of this doc was
+avoiding Linuxulator plumbing), so those Linux-style `/proc`/`/sys` paths don't exist. The
+`/proc/self/exe` failure is the fatal one: Zig's standard library resolves its own executable
+path via `readlink("/proc/self/exe")` on Linux targets (`std.fs.selfExePath`), and maps a
+failed lookup straight to `error.FileNotFound` — an exact match for the bare, path-less error
+we've been seeing. Right after these three failed lookups the process does normal
+allocator/thread setup (mmap/madvise/gettid) and then calls `exit_group(1)` directly — no
+further diagnostics printed, consistent with an early, generic error path.
+
+**Conclusion:** building `lang/bun` from ports has a genuine *build-time* dependency on Linux
+ABI compatibility (specifically, a working `/proc/self/exe`), even though the resulting `bun`
+binary itself is confirmed to target `x86_64-freebsd` and needs no Linux compat to run. This
+doesn't contradict the "no Linuxulator at runtime" goal of this jail — it's isolated to the
+one-time build step, which is exactly why section 6d's package-caching plan matters (pay this
+cost once, reuse the `.pkg` forever after).
+
+**Fix being tried now (Option A): temporarily mount `linprocfs`/`linsysfs` into this same
+builder jail, retry the build, then unmount once it succeeds** — keeps the runtime jail
+Linuxulator-free between builds:
+
+```sh
+kldstat | grep -i linux
+mount -t linprocfs linproc /jails/opencode-fbsd2/proc
+mount -t linsysfs linsys /jails/opencode-fbsd2/sys
+```
+
+then retry the `make install-missing-packages` / `make build` sequence from 6c. Once it
+succeeds (and section 6d's package is cached), unmount both:
+
+```sh
+umount /jails/opencode-fbsd2/proc
+umount /jails/opencode-fbsd2/sys
+```
+
+**Option B (not tried, fallback if A has problems):** do the `lang/bun` ports build in a
+separate, disposable Linuxulator-enabled builder jail (mirroring `.27`'s original setup), then
+copy the resulting cached `.pkg` (section 6d) into this clean `opencode-fbsd2` runtime jail via
+`pkg add` — cleaner separation, more setup up front.
 
 ### 6d. Cache the built package on the jail host **[do this once 6c is confirmed working]**
 
@@ -941,16 +973,17 @@ sysrc -x ifconfig_em0_alias0
 
 ## What to pick up on return
 
-1. **First and most urgent: resolve section 6c-i's blocking `zig obj` → `error: FileNotFound`
-   build failure.** Reproducible on a clean re-run, so it's a real bug not stale state. Next
-   step not yet run: check `jexec opencode-fbsd2 freebsd-version` against the hardcoded
-   `x86_64-freebsd.14.3-none` zig target (jail's pkg ABI was seen as `FreeBSD:15:amd64`
-   earlier — possible 14.3-vs-15.x sysroot mismatch), and inspect the generated
-   `freebsd-libc.txt` file for paths that may not exist on this system. Nothing in sections 7
-   onward can proceed until Bun itself genuinely works natively. Update section 6 with the
-   real outcome — if it succeeded, drop the "in progress"/"unresolved" tags and record the
-   confirmed Bun version and where the binary landed (`/usr/local/bin/bun` expected). If a fix
-   is found, document the actual root cause and fix here.
+1. **First and most urgent: confirm section 6c-i's Option A fix (mount `linprocfs`/`linsysfs`
+   into the builder jail, retry the build) actually works.** Root cause is confirmed via
+   `truss`: the ports build's bootstrap Zig is a Linux binary that needs a working
+   `/proc/self/exe`, which this jail didn't provide. If Option A's mount-and-retry succeeds,
+   finish the build, do section 6d's package caching, then unmount `linprocfs`/`linsysfs`
+   again (they're not needed by the final native `bun` binary or by opencode itself — only by
+   the one-time build). If Option A has problems, fall back to Option B (separate
+   Linuxulator-enabled builder jail). Nothing in sections 7 onward can proceed until Bun
+   itself genuinely works natively. Update section 6 with the real outcome — drop the
+   "root cause found, fix in progress" tag once confirmed, and record the confirmed Bun
+   version and where the binary landed (`/usr/local/bin/bun` expected).
 2. Once confirmed, do section 6d (cache the built `bun` package to
    `/usr/local/pkg-cache` on rep-laptop) before doing anything else — this is the one-time
    payoff for the multi-hour ports build, and easy to forget once you've moved on to chasing
