@@ -656,43 +656,79 @@ git clone https://github.com/anomalyco/opencode.git opencode-src
 cd opencode-src
 ```
 
-### 7a. Patch `@ff-labs/fff-bun` (unrelated native-addon crash)
+### 7a. Fix `@ff-labs/fff-bun` (unrelated native-addon crash) **[confirmed — real fix is a source edit, not a dependency patch]**
 
-This package does an eager top-level `require()` of a prebuilt native addon that has no
-FreeBSD build, crashing at import time before opencode even starts. Fix: lazy-load it,
-matching the pattern already used elsewhere in this codebase for optional native addons.
+This package has no FreeBSD build of its prebuilt native addon. The crash isn't inside
+`@ff-labs/fff-bun` itself, though — it's in how opencode's own wrapper consumes it.
+`packages/core/src/filesystem/fff.bun.ts` did an eager top-level `import { FileFinder, ... }
+from "@ff-labs/fff-bun"`, which forces Bun to load the native binding at module-evaluation
+time, before opencode even starts, on every platform including ones with no prebuilt
+binary for it.
 
-Note: `~/patches/@ff-labs%2Ffff-bun@0.9.3-existing-reference.patch` (copied in section 4a)
-is a **pre-existing, unrelated** patch already tracked in `opencode-src` — it's included as
-a reference for the `patchedDependencies` convention, not a verified FreeBSD-specific fix.
-If `@ff-labs/fff-bun` does need a FreeBSD-specific change, it still needs to be derived
-fresh and captured as its own patch file — the lazy-load pattern below:
+**Root cause detail:** the installed version is `@ff-labs/fff-bun@0.9.4` (see
+`packages/core/package.json`). The pre-existing `patches/@ff-labs%2Ffff-bun@0.9.3.patch`
+tracked in this repo (and copied to `~/patches` in section 4a) is for the *previous*
+version and is unrelated to FreeBSD — it predates this investigation and isn't a
+dependency-patch fix for this crash. Don't try to extend it; it's a red herring for this
+specific problem.
 
-```js
-// before (crashes eagerly on unsupported platforms)
-const native = require("./native-addon.node")
+**The actual, verified fix** is a plain source-level edit to opencode's own file —
+no `bun patch` of the dependency needed at all. Change the top-level `import` of runtime
+values to a type-only import, and wrap the actual `require()` in this codebase's existing
+`lazy()` helper so the native module is only touched (and can fail safely) the first time
+a caller actually needs it:
 
-// after (lazy, matches this repo's existing lazy() pattern)
-const native = lazy(() => {
+```ts
+// packages/core/src/filesystem/fff.bun.ts — before
+import {
+  FileFinder,
+  type DirItem, /* ...other types... */
+} from "@ff-labs/fff-bun"
+
+export function available() {
+  return FileFinder.isAvailable()
+}
+export function create(opts: Init): Result<Picker> {
+  const made = FileFinder.create(opts)
+  // ...
+}
+```
+
+```ts
+// packages/core/src/filesystem/fff.bun.ts — after
+import type {
+  FileFinder as FileFinderType,
+  DirItem, /* ...other types... */
+} from "@ff-labs/fff-bun"
+import { lazy } from "../util/lazy"
+
+// @ff-labs/fff-bun ships prebuilt native bindings only for a subset of
+// platforms (no FreeBSD build, for example). Load it lazily and tolerate a
+// missing module so callers can fall back to the ripgrep-based search layer
+// instead of crashing at import time.
+const mod = lazy((): typeof import("@ff-labs/fff-bun") | undefined => {
   try {
-    return require("./native-addon.node")
+    return require("@ff-labs/fff-bun") as typeof import("@ff-labs/fff-bun")
   } catch {
     return undefined
   }
 })
+
+export function available() {
+  return mod()?.FileFinder.isAvailable() ?? false
+}
+export function create(opts: Init): Result<Picker> {
+  const finder = mod()?.FileFinder as typeof FileFinderType | undefined
+  if (!finder) return { ok: false, error: "@ff-labs/fff-bun native module is not available on this platform" }
+  const made = finder.create(opts)
+  // ...
+}
 ```
 
-Apply as a tracked Bun patch so `bun install` doesn't wipe it out:
-
-```sh
-bun patch @ff-labs/fff-bun
-# edit the file bun patch tells you to edit, applying the lazy-load change above
-bun patch --commit 'node_modules/@ff-labs/fff-bun'
-```
-
-This repo already has one patch of this kind tracked at
-`patches/@ff-labs%2Ffff-bun@0.9.3.patch` — use it as your reference diff if you're
-re-deriving this on a fresh clone rather than reusing patch files from the `.27` jail.
+This is a small, self-contained diff to a file opencode owns, so it's a good candidate to
+upstream as a PR rather than carry as a local patch forever. Confirmed working: with this
+change in place, importing `fff.bun.ts` (and everything that transitively imports it) no
+longer throws at load time on a platform with no native binding.
 
 ### 7b. Install dependencies **[confirmed, with one extra prerequisite]**
 
@@ -942,7 +978,7 @@ export OTUI_ASSET_ROOT="$HOME/.otui-assets"
 cd ~/wip/opencode-src
 ```
 
-### 9a. Web mode sanity check **[expected to work — same as native Bun install, no @opentui/core render path involved]**
+### 9a. Web mode sanity check **[blocked in the jail by a TDZ crash — see 9a-i; not reproducible off-FreeBSD]**
 
 ```sh
 cd packages/opencode
@@ -954,7 +990,82 @@ curl -s -D - http://198.18.51.28:4096/ -o /dev/null
 regardless of actual network path — this is opencode's own deliberate behavior, not a sign
 your traffic is going anywhere external. Don't be alarmed by it.)
 
-### 9b. TUI sanity check **[unverified — first thing to confirm on return]**
+On `opencode-fbsd2`, this command actually crashes: a reference error / temporal-dead-zone
+(TDZ) style crash pointing at `directories.ts:160`, thrown during module evaluation before
+the listener ever comes up. See 9a-i for the investigation so far.
+
+### 9a-i. TDZ crash at `directories.ts:160` — investigation so far **[unresolved; likely FreeBSD/ports-bun-specific, not a source bug — resume here tomorrow]**
+
+**Symptom:** running `bun run src/index.ts web ...` in the jail throws a TDZ-shaped
+reference error during startup, referencing `directories.ts:160` (a `database.ts` binding
+read before its module finished initializing). This looks exactly like a circular-import
+evaluation-order bug: `directories.ts` and `database.ts` import each other (directly or
+transitively), and if the engine evaluates them in the wrong order relative to a live
+binding read, you get exactly this crash.
+
+**What's been ruled out so far** (all done as isolated repro scripts, run with a plain
+`bun run`, no jail involved):
+
+- A synthetic two-module repro with the *same shape* of circular, same-name binding
+  (`mod-a.ts` / `mod-b.ts`, both exporting/reading a `node` binding, static `import`)
+  evaluates in the correct order and does **not** crash.
+- Importing `directories.ts` alone, in isolation, loads fine.
+- Importing `project.ts` alone, in isolation, loads fine.
+- Importing `WebCommand` (from `cli/cmd/web.ts`) alone, in isolation, loads fine — this is
+  the actual entry point `bun run src/index.ts web` goes through, via a dynamic
+  `import("../../server/server")` inside the handler.
+- Replicating **all 31** of `packages/opencode/src/index.ts`'s top-level imports in one
+  synthetic file, in the same order as the real file, loads fine — `ALL IMPORTS LOADED OK`.
+- **Most significant:** running the actual, unmodified `opencode-src` checkout's real
+  `web` command end-to-end (`bun run packages/opencode/src/index.ts web --port <N>`, full
+  real dependency graph, `bun install`ed for real) starts up cleanly and serves requests
+  (`HTTP 401`, as expected with no password set) — confirmed on **both** stable Bun
+  `1.3.14` and canary Bun `1.4.0`, both on Linux (this rep-laptop's own sandbox, not the
+  jail).
+- Ran `madge --circular` across `packages/opencode/src` for a static view: the codebase
+  does have a lot of circular imports (124 detected file-groups) — this is evidently just
+  how this codebase is written, not inherently a bug — but nothing in that output isolates
+  a single obvious `directories.ts ⇄ database.ts` cycle distinct from the rest. Given the
+  crash won't even reproduce on Linux, static analysis alone isn't going to be conclusive
+  here; it needs to be reproduced live to bisect properly.
+
+**Working conclusion:** every attempt to reproduce this off of FreeBSD, including running
+the exact real source tree through two different Bun versions, has failed to crash. That
+shifts the likely root cause away from "opencode has a source-level circular-dependency
+bug" and toward "the FreeBSD ports-built `bun` binary (section 6c) evaluates this
+particular circular-import graph differently than upstream Linux/macOS Bun does" — e.g. a
+build-flag or JavaScriptCore-configuration difference in the ports build, since Bun has no
+officially supported FreeBSD binaries and the ports build is the only way to run it there.
+This is **not yet proven** — it's the leading hypothesis given the evidence, not a
+confirmed root cause.
+
+**Next steps (resume here):**
+
+1. From inside the jail (not off-FreeBSD — this doesn't reproduce anywhere else), get the
+   exact version info of the ports-built `bun` (`bun --version`, and if available
+   `bun --revision` for the underlying engine commit) and compare against the Linux
+   `1.3.14`/`1.4.0` builds already tested clean here.
+2. If the jail's `bun` is a *different* underlying revision than what's cached
+   (`bun-1.3.14_3.pkg` from section 6d), consider whether that cached package should be
+   rebuilt, or whether the crash is reproducible with a freshly-built one from a clean
+   `/usr/ports` checkout.
+3. Since this can't be reproduced outside the jail, the bisection has to happen live there:
+   comment out chunks of `routes/instance/httpapi/server.ts`'s ~100+ imports (Account,
+   Agent, Auth, BackgroundJob, Session*/Share* families, Storage, Worktree, etc.) directly
+   in the jail and re-run 9a until the crash disappears, then narrow from there. This is
+   the same bisection strategy already validated as sound (it's how `directories.ts` and
+   `project.ts` were cleared individually) — it just needs to run where the crash actually
+   happens.
+4. If a FreeBSD-ports-bun-specific engine bug is confirmed (rather than anything fixable in
+   opencode's own source), the right outcome is: (a) file it upstream against the `lang/bun`
+   port and/or Bun itself with a minimal repro, and (b) document a workaround here (e.g. a
+   specific bun version/build known to be safe, or restructuring the specific import cycle
+   defensively in opencode even though it's not required on other platforms — belt-and-braces,
+   since eliminating an unnecessary circular import is harmless even if it's not the "real"
+   bug).
+5. Once whichever fix/workaround is found, re-run 9a for real confirmation, then move to 9b.
+
+### 9b. TUI sanity check **[unverified — blocked behind 9a-i; second thing to confirm once 9a is unblocked]**
 
 ```sh
 cd ~/wip/opencode-src/packages/opencode
@@ -1046,21 +1157,35 @@ sysrc -x ifconfig_em0_alias0
 2. ~~Do section 6d (cache the built `bun` package)...~~ **Done.** Cached at
    `/usr/local/pkg-cache/bun-1.3.14_3.pkg` on rep-laptop; `linprocfs`/`linsysfs` unmounted
    from `opencode-fbsd2` again, confirmed clean.
-3. **First and most urgent now: move on to section 7** (clone opencode, apply the
-   `@ff-labs/fff-bun` patch) using the now-confirmed-working native `bun`. Confirm section 4a's
-   patch files actually landed in `~/patches` under `oc-user` first — `ls -la ~/patches` should
-   show all three `.patch` files plus `README.md`.
-4. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
-5. Confirm the `bun patch --commit` in section 8c actually persisted correctly
+3. ~~Move on to section 7...~~ **Done.** Section 7a's real fix identified and applied:
+   not a `bun patch` of the dependency, but a source edit to opencode's own
+   `packages/core/src/filesystem/fff.bun.ts` (type-only import + `lazy()`-wrapped
+   `require`). Confirmed this stops the eager-crash-on-unsupported-platform behavior.
+   Section 7a rewritten to match.
+4. **Blocked here — resume with this first:** section 9a's web-mode sanity check crashes
+   in the jail with a TDZ-shaped reference error at `directories.ts:160`. Extensive
+   isolated-repro work (see new section 9a-i) has ruled out the obvious candidates
+   (isolated module loads, a synthetic same-shape circular-import repro, and — most
+   tellingly — running the *actual* real `opencode-src` dependency graph's `web` command
+   end-to-end on **both** Bun `1.3.14` and Bun `1.4.0` on Linux, neither of which crashes).
+   Leading hypothesis: this is specific to the FreeBSD ports-built `bun` binary, not a
+   source bug in opencode — but that's not confirmed yet, since nothing outside the jail
+   can reproduce it to test against. **Next concrete action:** go back into
+   `opencode-fbsd2` and bisect `routes/instance/httpapi/server.ts`'s ~100+ imports live,
+   in the one place the crash actually happens. Full detail and a numbered next-steps list
+   is in section 9a-i.
+5. Run section 9b (TUI sanity check) — still blocked behind 9a-i, since 9a needs to pass
+   first.
+6. Confirm the `bun patch --commit` in section 8c actually persisted correctly
    (`cat patches/@opentui%2Fcore@0.4.5.patch` should exist and contain the 3-file diff;
    re-run `bun install` once to confirm the patch reapplies cleanly rather than being
    silently dropped).
-6. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
-7. If 9b fails: capture the exact error — most likely culprits are either the patch not
+7. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
+8. If 9b fails: capture the exact error — most likely culprits are either the patch not
    applying cleanly to a different `@opentui/core` version than 0.4.5 (check `patch`'s
    output, or the `python3` fallback's printed warnings) or a stale `.so` (arch/ABI
    mismatch) at `$OTUI_ASSET_ROOT/@opentui/core-freebsd-x64/libopentui.so`.
-8. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
+9. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
    fold the validated steps back into a single canonical guide, retiring both
    `freebsd-opencode-jail.md` (Linuxulator dead-end) and this document's "unverified"
    caveats.
