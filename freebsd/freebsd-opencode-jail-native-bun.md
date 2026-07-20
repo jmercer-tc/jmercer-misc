@@ -310,20 +310,35 @@ fallback/reference in case you need to re-derive one by hand.
 
 ---
 
-## 5. SSH access (optional but convenient) **[carried over]**
+## 5. SSH access (optional, not required by this guide) **[carried over]**
 
 ```sh
 jexec opencode-fbsd2 sysrc sshd_enable="YES"
 jexec opencode-fbsd2 service sshd start
 ```
 
-Then from the host: `ssh oc-user@198.18.51.28`.
+Then from the host: `ssh oc-user@198.18.51.28`. This is purely a convenience if you want an
+SSH-based terminal for your own use later — everything from section 6 onward in this guide
+is written assuming `jexec`, not SSH, so feel free to skip this section entirely.
 
 ---
 
 ## 6. Install native Bun **[confirmed on .27, same procedure]**
 
-As `oc-user` inside the jail (via `jexec -U oc-user opencode-fbsd2 sh` or over SSH):
+Everything from here through section 9 assumes a single persistent interactive shell,
+opened as `oc-user` inside the jail via `jexec` (not SSH):
+
+```sh
+jexec -U oc-user opencode-fbsd2 /usr/local/bin/bash
+```
+
+Stay in that one shell session for the rest of sections 6-9 — the `export`/`cd` state in
+each code block below carries over from one command to the next within it. If the session
+ever gets closed, just re-run the `jexec` line above to get back in; you'll need to re-run
+the `export HOME=...`/`export PATH=...` lines too since that state doesn't persist across
+separate `jexec` invocations.
+
+Once you're in that shell:
 
 ```sh
 curl -fsSL https://bun.sh/install | bash
@@ -410,20 +425,20 @@ a FreeBSD build of the native library, and a small patch so the JS loader accept
 ### 8a. Shortcut — reuse the already-built `.so` from the `.27` jail
 
 If the `.27` jail still exists, the fastest path is to just copy its already-built
-`libopentui.so` instead of rebuilding from scratch:
+`libopentui.so` instead of rebuilding from scratch. Both jails' filesystems are ordinary
+directory trees visible from the host, so this is a plain `cp` on **rep-freebsd** — no SSH,
+no `scp`, no need for either jail's networking to be up:
 
 ```sh
-# from the host
-scp oc-user@198.18.51.27:/home/oc-user/.otui-assets/@opentui/core-freebsd-x64/libopentui.so /tmp/
-scp /tmp/libopentui.so oc-user@198.18.51.28:/tmp/
+# on rep-freebsd (the host), not inside either jail
+mkdir -p /jails/opencode-fbsd2/home/oc-user/.otui-assets/@opentui/core-freebsd-x64
+cp /jails/opencode-fbsd/home/oc-user/.otui-assets/@opentui/core-freebsd-x64/libopentui.so \
+   /jails/opencode-fbsd2/home/oc-user/.otui-assets/@opentui/core-freebsd-x64/
+chown -R oc-user:oc-user /jails/opencode-fbsd2/home/oc-user/.otui-assets
 ```
 
-Then on `.28`:
-
-```sh
-mkdir -p ~/.otui-assets/@opentui/core-freebsd-x64
-mv /tmp/libopentui.so ~/.otui-assets/@opentui/core-freebsd-x64/
-```
+(Adjust `/jails/opencode-fbsd` if the `.27` jail's path differs — check with `jls` if
+unsure.)
 
 Skip to 8c if you do this.
 
