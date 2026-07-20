@@ -229,6 +229,22 @@ jexec opencode-fbsd2 pw useradd oc-user -m -s /usr/local/bin/bash -G wheel
 jexec opencode-fbsd2 passwd oc-user
 ```
 
+`pw useradd -m` populates the home directory from `/usr/share/skel`, which includes a
+`.profile` (copied in as `~/.profile`) but has no bash-specific skeleton file — bash as a
+login shell reads `~/.bash_profile` instead, and won't pick up `.profile` on its own. Add a
+`.bash_profile` that sources it, so anything the skeleton `.profile` sets still applies:
+
+```sh
+jexec opencode-fbsd2 sh -c '
+cat > /home/oc-user/.bash_profile <<EOF
+if [ -f "\$HOME/.profile" ]; then
+  . "\$HOME/.profile"
+fi
+EOF
+chown oc-user:oc-user /home/oc-user/.bash_profile
+'
+```
+
 > **Critical caveat, confirmed the hard way on `.27`:** `jexec` does **not** source shell
 > profiles or rc files, even for a login-shell user. Every command you run via
 > `jexec -U oc-user opencode-fbsd2 ...` must explicitly export `HOME` and `PATH` itself —
