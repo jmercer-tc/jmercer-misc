@@ -293,8 +293,16 @@ chown -R oc-user:oc-user /jails/opencode-fbsd2/home/oc-user/patches
 Verify from inside the jail:
 
 ```sh
-jexec -U oc-user opencode-fbsd2 ls -la ~/patches
+jexec -U oc-user opencode-fbsd2 ls -la /home/oc-user/patches
 ```
+
+> **Don't use `~/patches` here** — `~` gets expanded by the shell you're typing this into on
+> the host (running as root, whose `$HOME` is `/root`), *before* `jexec` ever runs, not by
+> anything inside the jail. That's why `ls -la ~/patches` resolves to `/root/patches`
+> instead of `oc-user`'s home — it's a distinct trap from the "jexec doesn't source shell
+> profiles" caveat noted earlier, though it rhymes with it. Stick to absolute paths
+> (`/home/oc-user/...`) in one-shot `jexec -U oc-user ...` commands, or wrap in
+> `sh -c 'export HOME=/home/oc-user; ...'` if you want `~` to resolve inside the jail.
 
 You should see all three `.patch` files plus `README.md`. Sections 7a, 8b, and 8c below now
 assume these are already sitting in `~/patches` — the inline diffs are kept alongside as a
