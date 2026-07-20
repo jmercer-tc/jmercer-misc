@@ -464,9 +464,10 @@ succeeds — this simplification is for the *next* jail/rebuild, not this one.
 codegen/optimization jobs at once; observed peak on rep-laptop was 100% across all 8 CPUs and
 ~40GB RAM during the LLVM object-codegen stage. That's well above the ~16GB the community
 `8ff/bun-freebsd` project quotes as a rough minimum — evidently optimistic for full-parallelism
-codegen. Not a sign of a problem by itself; only worth intervening if it starts swapping
-heavily or a compiler process gets OOM-killed, in which case reducing parallelism would be the
-next thing to try.
+codegen. rep-laptop has 64GB total, so a 40GB peak still leaves ~24GB of headroom — shouldn't
+swap under normal conditions. Not a sign of a problem by itself; only worth intervening if it
+starts swapping heavily or a compiler process gets OOM-killed, in which case reducing
+parallelism would be the next thing to try.
 
 **This step is currently running on `opencode-fbsd2` and has not yet been confirmed to
 succeed.** Once it finishes, verify:
