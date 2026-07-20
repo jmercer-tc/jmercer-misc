@@ -459,6 +459,15 @@ in-flight build on `opencode-fbsd2` right now was started with plain `make insta
 (before this was worked out), so it still needs the manual `pkg create -o` step in 6d if it
 succeeds — this simplification is for the *next* jail/rebuild, not this one.
 
+**Resource use during the build is heavy — expect this, don't panic.** The build passes
+`-Dllvm_codegen_threads=8` (matched to CPU count), so it runs that many parallel LLVM
+codegen/optimization jobs at once; observed peak on rep-laptop was 100% across all 8 CPUs and
+~40GB RAM during the LLVM object-codegen stage. That's well above the ~16GB the community
+`8ff/bun-freebsd` project quotes as a rough minimum — evidently optimistic for full-parallelism
+codegen. Not a sign of a problem by itself; only worth intervening if it starts swapping
+heavily or a compiler process gets OOM-killed, in which case reducing parallelism would be the
+next thing to try.
+
 **This step is currently running on `opencode-fbsd2` and has not yet been confirmed to
 succeed.** Once it finishes, verify:
 
