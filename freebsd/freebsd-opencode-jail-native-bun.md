@@ -113,6 +113,21 @@ Either path leaves you with the same result: a populated `/jails/opencode-fbsd2`
 `fetch`+`tar` version above is simpler and has fewer moving parts, so it's the recommended
 default.
 
+A freshly-extracted `base.txz` has **no root password set** (locked). Set one now, as its
+own standalone command:
+
+```sh
+jexec opencode-fbsd2 passwd root
+```
+
+This one is expected to prompt interactively — that's fine. The non-interactive goal above
+was specifically about skipping `bsdinstall`'s distribution-set/mirror `dialog` UI, not
+about eliminating every prompt everywhere; a simple password prompt run on its own is a
+different kind of interactive step and doesn't need scripting around. (If you ever do want
+this scripted too, `echo 'yourpassword' | jexec opencode-fbsd2 pw usermod root -h 0` sets it
+non-interactively by reading the plaintext password from stdin — but there's no real need
+to bother for a one-time setup step like this.)
+
 ### 2b. Jail config
 
 Minimal `/etc/jail.conf.d/opencode-fbsd2.conf`:
