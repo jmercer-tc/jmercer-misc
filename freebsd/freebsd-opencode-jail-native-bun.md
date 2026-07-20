@@ -418,22 +418,39 @@ jexec opencode-fbsd2 pkg update -f
 
 ### 6c. What's being tried now: build `lang/bun` from the ports tree **[in progress, not yet confirmed]**
 
-Since no binary package exists yet, the port has to be built from source. This looks heavier
-than it actually is: bun's own build *dependencies* (`llvm21`, `cmake`, `ninja`,
-`rust`/`cargo`, `node24`, `npm-node24`) still install as ordinary binary packages
-automatically — only `bun` itself compiles from source, since that's the one piece without a
-package yet. FreshPorts lists no interactive config options for this port, so it shouldn't
-prompt.
+Since no binary package exists yet, the port has to be built from source. **Correction to an
+earlier assumption in this doc:** the ports system does *not* default to installing a port's
+build dependencies (`llvm21`, `cmake`, `ninja`, `rust`, `node24`, `npm-node24`) as binary
+packages automatically — plain `make install` builds everything from source unless told
+otherwise, which for something like `llvm21`/`rust` can mean a multi-hour compile just to get
+to the point of building `bun` itself. Two things fix that:
+
+- **`make install-missing-packages`** — installs any missing dependencies via `pkg` (binary)
+  before the main build runs, instead of compiling them from source.
+- **`BATCH=yes`** — suppresses interactive `make config` / license-acceptance dialogs
+  anywhere in the dependency chain (FreshPorts shows `lang/bun` itself has no config options,
+  but some of its dependencies may still prompt for a license acceptance without this).
 
 ```sh
 # populate /usr/ports inside the jail (shallow clone keeps it small)
 jexec opencode-fbsd2 pkg install -y git
 jexec opencode-fbsd2 git clone --depth 1 https://git.FreeBSD.org/ports.git /usr/ports
 
-# build + install (root shell) — expect this to take a while: it fetches a prebuilt
-# WebKit tarball plus bun/node-module/cargo-vendor source tarballs, then compiles bun
-jexec opencode-fbsd2 sh -c 'cd /usr/ports/lang/bun && make install clean'
+# pre-install dependencies as binary packages, then build only bun itself from source —
+# fully non-interactive
+jexec opencode-fbsd2 sh -c '
+export BATCH=yes
+export ASSUME_ALWAYS_YES=yes
+cd /usr/ports/lang/bun
+make install-missing-packages
+make install clean
+'
 ```
+
+If you already had a plain `make install clean` running before reading this and it's visibly
+compiling something huge (`llvm`, `rust`), it's worth `Ctrl-C`-ing it and restarting with the
+sequence above rather than waiting it out — a from-source `llvm21`/`rust` build can take
+hours on top of what building `bun` itself needs.
 
 **This step is currently running on `opencode-fbsd2` and has not yet been confirmed to
 succeed.** Once it finishes, verify:
