@@ -583,7 +583,13 @@ separate, disposable Linuxulator-enabled builder jail (mirroring `.27`'s origina
 copy the resulting cached `.pkg` (section 6d) into this clean `opencode-fbsd2` runtime jail via
 `pkg add` — cleaner separation, more setup up front.
 
-### 6d. Cache the built package on the jail host **[do this now — 6c is confirmed working]**
+### 6d. Cache the built package on the jail host **[confirmed]**
+
+Done. Cached at `/usr/local/pkg-cache/bun-1.3.14_3.pkg` on rep-laptop (28MB, ABI
+`FreeBSD:15:amd64`). The `linprocfs`/`linsysfs` mounts from 6c-i were also unmounted from
+`opencode-fbsd2` afterward — confirmed clean (`mount | grep opencode-fbsd2` shows only
+`devfs`). Any future jail rebuild on this same FreeBSD 15.1 host can skip the entire
+multi-hour ports build: just copy this `.pkg` in and `pkg add` it (see below).
 
 Since `lang/bun` has no upstream binary package yet, that multi-hour build is a one-off cost
 worth not paying again — every future jail (a rebuilt `opencode-fbsd2`, or eventually retiring
@@ -1019,30 +1025,28 @@ sysrc -x ifconfig_em0_alias0
 
 ## What to pick up on return
 
-1. ~~First and most urgent: confirm section 6c-i's Option A fix...~~ **Done.** `bun 1.3.14`
-   confirmed as a genuine native FreeBSD ELF binary (section 6c) after mounting
-   `linprocfs`/`linsysfs` (section 6c-i, Option A) and re-running `make install clean`. Root
-   cause: the ports build's bootstrap Zig is a Linux binary needing a working
-   `/proc/self/exe`.
-2. **First and most urgent now: do section 6d (cache the built `bun` package to
-   `/usr/local/pkg-cache` on rep-laptop)** — this is the one-time payoff for the multi-hour
-   ports build; do it now before moving on, then unmount `linprocfs`/`linsysfs` from
-   `opencode-fbsd2` (no longer needed — only the build required them, not the resulting
-   binary or opencode itself).
-4. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
-   doing anything else in sections 7-8 — `ls -la ~/patches` should show all three `.patch`
-   files plus `README.md`.
-5. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
-6. Confirm the `bun patch --commit` in section 8c actually persisted correctly
+1. ~~Confirm section 6c-i's Option A fix...~~ **Done.** `bun 1.3.14` confirmed as a genuine
+   native FreeBSD ELF binary (section 6c) after mounting `linprocfs`/`linsysfs` (section
+   6c-i, Option A) and re-running `make install clean`. Root cause: the ports build's
+   bootstrap Zig is a Linux binary needing a working `/proc/self/exe`.
+2. ~~Do section 6d (cache the built `bun` package)...~~ **Done.** Cached at
+   `/usr/local/pkg-cache/bun-1.3.14_3.pkg` on rep-laptop; `linprocfs`/`linsysfs` unmounted
+   from `opencode-fbsd2` again, confirmed clean.
+3. **First and most urgent now: move on to section 7** (clone opencode, apply the
+   `@ff-labs/fff-bun` patch) using the now-confirmed-working native `bun`. Confirm section 4a's
+   patch files actually landed in `~/patches` under `oc-user` first — `ls -la ~/patches` should
+   show all three `.patch` files plus `README.md`.
+4. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
+5. Confirm the `bun patch --commit` in section 8c actually persisted correctly
    (`cat patches/@opentui%2Fcore@0.4.5.patch` should exist and contain the 3-file diff;
    re-run `bun install` once to confirm the patch reapplies cleanly rather than being
    silently dropped).
-7. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
-8. If 9b fails: capture the exact error — most likely culprits are either the patch not
+6. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
+7. If 9b fails: capture the exact error — most likely culprits are either the patch not
    applying cleanly to a different `@opentui/core` version than 0.4.5 (check `patch`'s
    output, or the `python3` fallback's printed warnings) or a stale `.so` (arch/ABI
    mismatch) at `$OTUI_ASSET_ROOT/@opentui/core-freebsd-x64/libopentui.so`.
-9. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
+8. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
    fold the validated steps back into a single canonical guide, retiring both
    `freebsd-opencode-jail.md` (Linuxulator dead-end) and this document's "unverified"
    caveats.
