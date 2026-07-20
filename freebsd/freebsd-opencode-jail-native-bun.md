@@ -467,6 +467,53 @@ is already on `PATH` via `/usr/share/skel/dot.profile`), in which case section 4
 `.bash_profile` addition of `~/.bun/bin` to `PATH` becomes unnecessary (but harmless — it
 just won't exist) rather than required.
 
+### 6d. Cache the built package on the jail host **[do this once 6c is confirmed working]**
+
+Since `lang/bun` has no upstream binary package yet, that multi-hour build is a one-off cost
+worth not paying again — every future jail (a rebuilt `opencode-fbsd2`, or eventually retiring
+`.27` in favor of a same-approach `opencode-fbsd`) can reuse the exact package this build just
+produced. `bun`'s own port has no listed run-depends, so the resulting package should stand
+alone at install time with no need to also cache the whole llvm/rust/node toolchain.
+
+Build a distributable `.pkg` from the already-installed copy (run inside the jail, as root):
+
+```sh
+jexec opencode-fbsd2 mkdir -p /root/pkg-cache
+jexec opencode-fbsd2 pkg create -o /root/pkg-cache bun
+```
+
+This produces something like `/root/pkg-cache/bun-1.3.14_3.pkg` inside the jail. Copy it out
+to a persistent spot on rep-laptop itself (**not** inside any jail's directory tree, so it
+survives jail teardown/rebuild) — since the jail's filesystem is an ordinary directory tree
+from the host's point of view, a plain `cp` works:
+
+```sh
+mkdir -p /usr/local/pkg-cache
+cp /jails/opencode-fbsd2/root/pkg-cache/bun-*.pkg /usr/local/pkg-cache/
+```
+
+Packages are tied to a specific FreeBSD ABI (release + arch, e.g. `FreeBSD:15:amd64` —
+confirm with `jexec opencode-fbsd2 pkg config ABI`), so this cached file is only valid for
+future jails built from the same release; a different FreeBSD version would need its own
+build. Worth naming/tagging the file with that ABI if you expect to eventually juggle more
+than one release.
+
+To reuse it in a future jail instead of rebuilding from ports, just copy it in and install
+directly — no repo catalog needed for a single cached package:
+
+```sh
+# from the host, into the new jail's filesystem
+cp /usr/local/pkg-cache/bun-*.pkg /jails/<new-jail-name>/root/
+
+# then inside that jail
+jexec <new-jail-name> pkg add /root/bun-*.pkg
+```
+
+(If this ever grows beyond one or two cached packages and juggling filenames/versions by
+hand gets annoying, `pkg repo /usr/local/pkg-cache` will generate a proper repo catalog over
+that directory, which you could then point a jail's `/usr/local/etc/pkg/repos/` config at as
+a `file://` repo — not needed yet for just `bun`, but worth knowing if this cache grows.)
+
 ---
 
 ## 7. Clone and build opencode **[confirmed for install; TUI render unverified]**
@@ -853,20 +900,24 @@ sysrc -x ifconfig_em0_alias0
    itself genuinely works natively. Update section 6 with the real outcome — if it succeeded,
    drop the "in progress" tag and record the confirmed Bun version and where the binary
    landed (`/usr/local/bin/bun` expected). If it failed, capture the exact build error.
-2. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
+2. Once confirmed, do section 6d (cache the built `bun` package to
+   `/usr/local/pkg-cache` on rep-laptop) before doing anything else — this is the one-time
+   payoff for the multi-hour ports build, and easy to forget once you've moved on to chasing
+   the TUI render.
+4. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
    doing anything else in sections 7-8 — `ls -la ~/patches` should show all three `.patch`
    files plus `README.md`.
-3. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
-4. Confirm the `bun patch --commit` in section 8c actually persisted correctly
+5. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
+6. Confirm the `bun patch --commit` in section 8c actually persisted correctly
    (`cat patches/@opentui%2Fcore@0.4.5.patch` should exist and contain the 3-file diff;
    re-run `bun install` once to confirm the patch reapplies cleanly rather than being
    silently dropped).
-5. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
-6. If 9b fails: capture the exact error — most likely culprits are either the patch not
+7. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
+8. If 9b fails: capture the exact error — most likely culprits are either the patch not
    applying cleanly to a different `@opentui/core` version than 0.4.5 (check `patch`'s
    output, or the `python3` fallback's printed warnings) or a stale `.so` (arch/ABI
    mismatch) at `$OTUI_ASSET_ROOT/@opentui/core-freebsd-x64/libopentui.so`.
-7. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
+9. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
    fold the validated steps back into a single canonical guide, retiring both
    `freebsd-opencode-jail.md` (Linuxulator dead-end) and this document's "unverified"
    caveats.
