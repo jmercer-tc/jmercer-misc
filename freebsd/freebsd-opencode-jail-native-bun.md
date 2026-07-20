@@ -15,7 +15,12 @@ because `.27` still had the Linuxulator enabled (it started life as a Linuxulato
 the Linux binary ran fine under Linux emulation. This jail deliberately has no Linuxulator,
 so the exact same install script fails outright (`ELF interpreter
 /lib64/ld-linux-x86-64.so.2 not found`). See section 6 for the real fix — building FreeBSD's
-native `lang/bun` port, since no pre-built binary package exists for it yet.
+native `lang/bun` port, since no pre-built binary package exists for it yet. **Update: this is
+now done and confirmed** — `bun 1.3.14` built from `lang/bun` and verified as a genuine native
+FreeBSD ELF binary (section 6c). The build itself turned out to have its own hidden
+Linux-ABI dependency (section 6c-i) — ironic given the whole point of this doc — but that's
+isolated to the one-time build step and doesn't affect the resulting binary or the runtime
+jail.
 
 Status legend used throughout:
 - **[confirmed]** — actually run and observed working on the `.27` jail. (Caveat added above:
@@ -416,7 +421,7 @@ jexec opencode-fbsd2 rm -f /usr/local/etc/pkg/repos/FreeBSD.conf
 jexec opencode-fbsd2 pkg update -f
 ```
 
-### 6c. What's being tried now: build `lang/bun` from the ports tree **[in progress, not yet confirmed]**
+### 6c. Build `lang/bun` from the ports tree **[confirmed]**
 
 Since no binary package exists yet, the port has to be built from source. **Correction to an
 earlier assumption in this doc:** the ports system does *not* default to installing a port's
@@ -469,20 +474,29 @@ swap under normal conditions. Not a sign of a problem by itself; only worth inte
 starts swapping heavily or a compiler process gets OOM-killed, in which case reducing
 parallelism would be the next thing to try.
 
-**This step is currently running on `opencode-fbsd2` and has not yet been confirmed to
-succeed.** Once it finishes, verify:
+**Confirmed working on `opencode-fbsd2`** (after the `linprocfs`/`linsysfs` workaround in
+6c-i). Verified:
 
 ```sh
-bun --version
-file $(which bun)
+jexec opencode-fbsd2 bun --version
+# 1.3.14
+
+jexec opencode-fbsd2 file $(jexec opencode-fbsd2 which bun)
+# /usr/local/bin/bun: ELF 64-bit LSB executable, x86-64, version 1 (FreeBSD), dynamically
+# linked, interpreter /libexec/ld-elf.so.1, for FreeBSD 15.1, FreeBSD-style, stripped
+
+jexec opencode-fbsd2 pkg info bun
+# Architecture: FreeBSD:15:amd64 — matches earlier ABI observation
+# Shared Libs required: libc++.so.1, libc.so.7, libcxxrt.so.1, libexecinfo.so.1,
+#   libgcc_s.so.1, libm.so.5, libthr.so.3 — all base-system libs, no run-depends on other
+#   ports. Confirms the cached .pkg (6d) will stand alone on any same-release jail.
+# Flat size: 100MiB
 ```
 
-`file` should report a FreeBSD ELF binary (not the Linux ABI note from 6a). Update this
-section with the actual outcome once confirmed — including whether `bun` lands on `PATH` via
-`/usr/local/bin` automatically (likely, since ports/pkg installs there and `/usr/local/bin`
-is already on `PATH` via `/usr/share/skel/dot.profile`), in which case section 4's
-`.bash_profile` addition of `~/.bun/bin` to `PATH` becomes unnecessary (but harmless — it
-just won't exist) rather than required.
+Genuine native FreeBSD ELF, dynamically linked against the real `/libexec/ld-elf.so.1` — not
+the Linux ABI stub from 6a. `bun` landed at `/usr/local/bin/bun` automatically via ports/pkg,
+which is already on `PATH` via `/usr/share/skel/dot.profile`, so section 4's `~/.bun/bin`
+`PATH` addition is confirmed unnecessary (harmless no-op) rather than required.
 
 ### 6c-i. Blocking build failure: `zig obj` → `error: FileNotFound` **[root cause found, fix in progress]**
 
@@ -569,7 +583,7 @@ separate, disposable Linuxulator-enabled builder jail (mirroring `.27`'s origina
 copy the resulting cached `.pkg` (section 6d) into this clean `opencode-fbsd2` runtime jail via
 `pkg add` — cleaner separation, more setup up front.
 
-### 6d. Cache the built package on the jail host **[do this once 6c is confirmed working]**
+### 6d. Cache the built package on the jail host **[do this now — 6c is confirmed working]**
 
 Since `lang/bun` has no upstream binary package yet, that multi-hour build is a one-off cost
 worth not paying again — every future jail (a rebuilt `opencode-fbsd2`, or eventually retiring
@@ -1005,21 +1019,16 @@ sysrc -x ifconfig_em0_alias0
 
 ## What to pick up on return
 
-1. **First and most urgent: confirm section 6c-i's Option A fix (mount `linprocfs`/`linsysfs`
-   into the builder jail, retry the build) actually works.** Root cause is confirmed via
-   `truss`: the ports build's bootstrap Zig is a Linux binary that needs a working
-   `/proc/self/exe`, which this jail didn't provide. If Option A's mount-and-retry succeeds,
-   finish the build, do section 6d's package caching, then unmount `linprocfs`/`linsysfs`
-   again (they're not needed by the final native `bun` binary or by opencode itself — only by
-   the one-time build). If Option A has problems, fall back to Option B (separate
-   Linuxulator-enabled builder jail). Nothing in sections 7 onward can proceed until Bun
-   itself genuinely works natively. Update section 6 with the real outcome — drop the
-   "root cause found, fix in progress" tag once confirmed, and record the confirmed Bun
-   version and where the binary landed (`/usr/local/bin/bun` expected).
-2. Once confirmed, do section 6d (cache the built `bun` package to
-   `/usr/local/pkg-cache` on rep-laptop) before doing anything else — this is the one-time
-   payoff for the multi-hour ports build, and easy to forget once you've moved on to chasing
-   the TUI render.
+1. ~~First and most urgent: confirm section 6c-i's Option A fix...~~ **Done.** `bun 1.3.14`
+   confirmed as a genuine native FreeBSD ELF binary (section 6c) after mounting
+   `linprocfs`/`linsysfs` (section 6c-i, Option A) and re-running `make install clean`. Root
+   cause: the ports build's bootstrap Zig is a Linux binary needing a working
+   `/proc/self/exe`.
+2. **First and most urgent now: do section 6d (cache the built `bun` package to
+   `/usr/local/pkg-cache` on rep-laptop)** — this is the one-time payoff for the multi-hour
+   ports build; do it now before moving on, then unmount `linprocfs`/`linsysfs` from
+   `opencode-fbsd2` (no longer needed — only the build required them, not the resulting
+   binary or opencode itself).
 4. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
    doing anything else in sections 7-8 — `ls -la ~/patches` should show all three `.patch`
    files plus `README.md`.
