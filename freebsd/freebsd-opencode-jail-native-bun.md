@@ -79,8 +79,20 @@ that is needed. Native Bun runs directly on FreeBSD.
 > to attach to. This step has to happen **before** `service jail start`, not after.
 
 `bsdinstall jail` works but is interactive (a `dialog`-based distribution-set checklist and
-mirror prompt). To skip that entirely, fetch and extract `base.txz` directly for the
-release the host is running:
+mirror prompt). To skip that entirely, extract `base.txz` directly.
+
+**[confirmed present on rep-laptop]** The installer already leaves a copy of `base.txz` on
+disk at `/usr/freebsd-dist/base.txz` — no network fetch needed at all, and it guarantees an
+exact version match with the running host (better than pulling a potentially different
+point release from a mirror):
+
+```sh
+mkdir -p /jails/opencode-fbsd2
+tar -xf /usr/freebsd-dist/base.txz -C /jails/opencode-fbsd2 --unlink
+```
+
+If that file isn't present on whatever host you're building this on, fall back to fetching
+it over the network for the release the host is running:
 
 ```sh
 mkdir -p /jails/opencode-fbsd2
@@ -91,9 +103,9 @@ tar -xf /tmp/base.txz -C /jails/opencode-fbsd2 --unlink
 rm /tmp/base.txz
 ```
 
-That's the whole base system — no dialog, no prompts, no interactive mirror selection.
-`--unlink` avoids `tar` choking on any pre-existing files if you ever re-run this against
-the same directory.
+Either way, that's the whole base system — no dialog, no prompts, no interactive mirror
+selection. `--unlink` avoids `tar` choking on any pre-existing files if you ever re-run this
+against the same directory.
 
 If you'd rather use `bsdinstall` specifically (e.g. to match exactly how the `.27` jail was
 built), it can also be driven non-interactively by pre-setting the distribution list and
