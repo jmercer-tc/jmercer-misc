@@ -125,20 +125,9 @@ Either path leaves you with the same result: a populated `/jails/opencode-fbsd2`
 `fetch`+`tar` version above is simpler and has fewer moving parts, so it's the recommended
 default.
 
-A freshly-extracted `base.txz` has **no root password set** (locked). Set one now, as its
-own standalone command:
-
-```sh
-jexec opencode-fbsd2 passwd root
-```
-
-This one is expected to prompt interactively — that's fine. The non-interactive goal above
-was specifically about skipping `bsdinstall`'s distribution-set/mirror `dialog` UI, not
-about eliminating every prompt everywhere; a simple password prompt run on its own is a
-different kind of interactive step and doesn't need scripting around. (If you ever do want
-this scripted too, `echo 'yourpassword' | jexec opencode-fbsd2 pw usermod root -h 0` sets it
-non-interactively by reading the plaintext password from stdin — but there's no real need
-to bother for a one-time setup step like this.)
+Note: a freshly-extracted `base.txz` has **no root password set** (locked) — that gets
+fixed in 2c, once the jail is actually running (`jexec` needs a running jail to attach to,
+so it can't happen here in 2a).
 
 ### 2b. Jail config
 
@@ -170,6 +159,21 @@ You should see `opencode-fbsd2` listed with IP `198.18.51.28`.
 
 > Reminder for later teardown: removing a jail from autostart is `sysrc jail_list-="opencode-fbsd2"`,
 > not editing the string by hand — avoids stray whitespace/duplicate entries in `rc.conf`.
+
+Now that the jail is actually running, `jexec` has something to attach to — set the root
+password (noted back in 2a as deferred to here):
+
+```sh
+jexec opencode-fbsd2 passwd root
+```
+
+This one is expected to prompt interactively — that's fine. The non-interactive goal in 2a
+was specifically about skipping `bsdinstall`'s distribution-set/mirror `dialog` UI, not
+about eliminating every prompt everywhere; a simple password prompt run on its own is a
+different kind of interactive step and doesn't need scripting around. (If you ever do want
+this scripted too, `echo 'yourpassword' | jexec opencode-fbsd2 pw usermod root -h 0` sets it
+non-interactively by reading the plaintext password from stdin — but there's no real need
+to bother for a one-time setup step like this.)
 
 ---
 
