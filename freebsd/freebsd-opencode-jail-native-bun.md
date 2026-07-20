@@ -467,6 +467,53 @@ is already on `PATH` via `/usr/share/skel/dot.profile`), in which case section 4
 `.bash_profile` addition of `~/.bun/bin` to `PATH` becomes unnecessary (but harmless — it
 just won't exist) rather than required.
 
+### 6c-i. Blocking build failure: `zig obj` → `error: FileNotFound` **[unresolved]**
+
+`make build` (and the combined `make install clean`) both reproducibly fail during bun's own
+internal build step, not the ports dependency stage. Bun's build shells out to a bootstrap
+Zig binary (`/usr/ports/lang/bun/work/oven-zig/bootstrap-x86_64-linux-musl/zig`) to
+cross-compile `bun-zig.{0..7}.o` via `zig build obj`, targeting
+`-Dtarget=x86_64-freebsd.14.3-none` with `-Dfreebsd_sysroot=/` and a generated libc descriptor
+file. The ninja output shows a bare `error: FileNotFound` (no path given) immediately followed
+by `FAILED: [code=1] bun-zig.0.o ... bun-zig.7.o` and `ninja: build stopped: subcommand
+failed.` Confirmed reproducible: happened identically on a fresh `make clean` +
+`install-missing-packages` + `make build` re-run, ruling out stale work-directory state as
+the cause.
+
+Checked and ruled out:
+- Not a leftover-interactive-build / stale-`work/`-directory artifact (recurred after a clean
+  re-run).
+- Not the same failure as upstream oven-sh/bun issue
+  [#25756](https://github.com/oven-sh/bun/issues/25756) — that one is Arch Linux, a debug
+  build, and a different error message shape; it referenced an older issue (#10233) and
+  didn't resolve with a fix, just closed with a "docs" label. Dead end.
+
+Leading hypothesis, not yet tested: **FreeBSD release mismatch.** The zig cross-compile
+target is hardcoded to `x86_64-freebsd.14.3-none`, but this jail's `pkg` ABI was observed
+earlier (during the `latest`-repo troubleshooting) as `FreeBSD:15:amd64` — i.e. the jail may
+actually be running FreeBSD 15.x while bun's build assumes a 14.3 sysroot layout. A
+version-specific path (crt object, header dir, or the dynamic linker) that moved or got
+renamed between 14.x and 15.x could plausibly produce a bare, path-less `FileNotFound` like
+this.
+
+Next diagnostic steps (not yet run):
+
+```sh
+# confirm actual release running in the jail
+jexec opencode-fbsd2 freebsd-version
+jexec opencode-fbsd2 uname -a
+
+# find and inspect the libc descriptor zig's --libc flag points at
+jexec opencode-fbsd2 find /usr/ports/lang/bun/work -iname 'freebsd-libc.txt'
+jexec opencode-fbsd2 cat <path-from-above>
+```
+
+The `freebsd-libc.txt` file should list the include dirs, crt object paths, and dynamic
+linker path zig expects on the target sysroot — check whether every path it names actually
+exists inside the jail. If the jail is genuinely 15.x and something in that list is
+14.3-specific, that's the fix target (likely a `-Dfreebsd_sysroot`/libc-file override, or a
+patched port, rather than something fixable from the jail side alone).
+
 ### 6d. Cache the built package on the jail host **[do this once 6c is confirmed working]**
 
 Since `lang/bun` has no upstream binary package yet, that multi-hour build is a one-off cost
@@ -894,12 +941,16 @@ sysrc -x ifconfig_em0_alias0
 
 ## What to pick up on return
 
-1. **First and most urgent: confirm section 6c's `make install clean` for `lang/bun`
-   actually succeeded** (`bun --version` and `file $(which bun)` should show a real FreeBSD
-   ELF, not the Linux-ABI error from 6a). Nothing in sections 7 onward can proceed until Bun
-   itself genuinely works natively. Update section 6 with the real outcome — if it succeeded,
-   drop the "in progress" tag and record the confirmed Bun version and where the binary
-   landed (`/usr/local/bin/bun` expected). If it failed, capture the exact build error.
+1. **First and most urgent: resolve section 6c-i's blocking `zig obj` → `error: FileNotFound`
+   build failure.** Reproducible on a clean re-run, so it's a real bug not stale state. Next
+   step not yet run: check `jexec opencode-fbsd2 freebsd-version` against the hardcoded
+   `x86_64-freebsd.14.3-none` zig target (jail's pkg ABI was seen as `FreeBSD:15:amd64`
+   earlier — possible 14.3-vs-15.x sysroot mismatch), and inspect the generated
+   `freebsd-libc.txt` file for paths that may not exist on this system. Nothing in sections 7
+   onward can proceed until Bun itself genuinely works natively. Update section 6 with the
+   real outcome — if it succeeded, drop the "in progress"/"unresolved" tags and record the
+   confirmed Bun version and where the binary landed (`/usr/local/bin/bun` expected). If a fix
+   is found, document the actual root cause and fix here.
 2. Once confirmed, do section 6d (cache the built `bun` package to
    `/usr/local/pkg-cache` on rep-laptop) before doing anything else — this is the one-time
    payoff for the multi-hour ports build, and easy to forget once you've moved on to chasing
