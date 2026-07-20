@@ -142,6 +142,44 @@ jexec opencode-fbsd2 passwd oc-user
 
 ---
 
+## 4a. Copy the patch files into `oc-user`'s home directory **[new]**
+
+The patch files referenced later in sections 7a/8b/8c
+(`opentui-monorepo-freebsd-target.patch`, `opentui-core@0.4.5-freebsd-native-file-names.patch`,
+`@ff-labs%2Ffff-bun@0.9.3-existing-reference.patch`, plus their `README.md`) live in the
+`jmercer-misc` repo on GitHub, not on rep-freebsd itself. Now that `oc-user`'s home directory
+exists, pull them down and stage them before going any further.
+
+On **rep-freebsd** (the host — not inside the jail yet):
+
+```sh
+# one-time clone, or pull if you already have it
+git clone git@github.com:jmercer-tc/jmercer-misc.git ~/jmercer-misc
+# cd ~/jmercer-misc && git pull   # if it already exists, use this instead
+
+# jails are visible as ordinary directory trees from the host, so a plain cp works —
+# no need for scp or the jail to have networking/SSH up yet
+mkdir -p /jails/opencode-fbsd2/home/oc-user/patches
+cp ~/jmercer-misc/freebsd/patches/*.patch ~/jmercer-misc/freebsd/patches/README.md \
+   /jails/opencode-fbsd2/home/oc-user/patches/
+chown -R 1001:1001 /jails/opencode-fbsd2/home/oc-user/patches
+```
+
+(Replace `1001:1001` with `oc-user`'s actual uid:gid if it differs —
+`jexec opencode-fbsd2 id oc-user` will tell you.)
+
+Verify from inside the jail:
+
+```sh
+jexec -U oc-user opencode-fbsd2 ls -la ~/patches
+```
+
+You should see all three `.patch` files plus `README.md`. Sections 7a, 8b, and 8c below now
+assume these are already sitting in `~/patches` — the inline diffs are kept alongside as a
+fallback/reference in case you need to re-derive one by hand.
+
+---
+
 ## 5. SSH access (optional but convenient) **[carried over]**
 
 ```sh
@@ -189,7 +227,13 @@ cd opencode-src
 
 This package does an eager top-level `require()` of a prebuilt native addon that has no
 FreeBSD build, crashing at import time before opencode even starts. Fix: lazy-load it,
-matching the pattern already used elsewhere in this codebase for optional native addons:
+matching the pattern already used elsewhere in this codebase for optional native addons.
+
+Note: `~/patches/@ff-labs%2Ffff-bun@0.9.3-existing-reference.patch` (copied in section 4a)
+is a **pre-existing, unrelated** patch already tracked in `opencode-src` — it's included as
+a reference for the `patchedDependencies` convention, not a verified FreeBSD-specific fix.
+If `@ff-labs/fff-bun` does need a FreeBSD-specific change, it still needs to be derived
+fresh and captured as its own patch file — the lazy-load pattern below:
 
 ```js
 // before (crashes eagerly on unsupported platforms)
@@ -264,7 +308,13 @@ git clone https://github.com/sst/opentui.git ~/opentui
 cd ~/opentui
 ```
 
-Apply this diff (already hand-verified working, reproduced here in full):
+Apply the patch copied over in section 4a:
+
+```sh
+git apply ~/patches/opentui-monorepo-freebsd-target.patch
+```
+
+The full diff is reproduced below too, in case you need to re-derive or hand-apply it:
 
 ```diff
 diff --git a/packages/core/scripts/build.ts b/packages/core/scripts/build.ts
@@ -354,8 +404,20 @@ Once you're done with your changes, run:
   bun patch --commit 'node_modules/@opentui/core'
 ```
 
-Apply the same `NATIVE_FILE_NAMES`/platform-union edit to each of the three files listed
-above — each occurrence looks like:
+Apply the patch copied over in section 4a — this is a **real, mechanically-generated diff**
+(produced by applying the edit to a byte-identical copy of the published npm package and
+diffing against the original), so it should apply cleanly:
+
+```sh
+patch -p1 -d node_modules/@opentui/core < ~/patches/opentui-core@0.4.5-freebsd-native-file-names.patch
+```
+
+(`-p1 -d node_modules/@opentui/core` strips the `node_modules/@opentui/core/` prefix baked
+into the diff paths.)
+
+If it doesn't apply cleanly for some reason (e.g. a different `@opentui/core` patch version
+than 0.4.5), fall back to the manual edit — each occurrence of `NATIVE_FILE_NAMES` looks
+like:
 
 ```js
 var NATIVE_FILE_NAMES = {
@@ -376,7 +438,7 @@ var NATIVE_FILE_NAMES = {
 };
 ```
 
-A small `python3` script does all three files in one shot:
+or run this `python3` script, which does all three files in one shot:
 
 ```python3
 import re, pathlib
@@ -529,16 +591,20 @@ sysrc -x ifconfig_em0_alias0
 
 ## What to pick up on return
 
-1. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
-2. Confirm the `bun patch --commit` in section 8c actually persisted correctly
+1. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
+   doing anything else in sections 7-8 — `ls -la ~/patches` should show all three `.patch`
+   files plus `README.md`.
+2. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
+3. Confirm the `bun patch --commit` in section 8c actually persisted correctly
    (`cat patches/@opentui%2Fcore@0.4.5.patch` should exist and contain the 3-file diff;
    re-run `bun install` once to confirm the patch reapplies cleanly rather than being
    silently dropped).
-3. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
-4. If 9b fails: capture the exact error — most likely culprits are either the
-   `python3` regex not matching all three files cleanly (check its printed warnings) or
-   a stale `.so` (arch/ABI mismatch) at `$OTUI_ASSET_ROOT/@opentui/core-freebsd-x64/libopentui.so`.
-5. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
+4. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
+5. If 9b fails: capture the exact error — most likely culprits are either the patch not
+   applying cleanly to a different `@opentui/core` version than 0.4.5 (check `patch`'s
+   output, or the `python3` fallback's printed warnings) or a stale `.so` (arch/ABI
+   mismatch) at `$OTUI_ASSET_ROOT/@opentui/core-freebsd-x64/libopentui.so`.
+6. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
    fold the validated steps back into a single canonical guide, retiring both
    `freebsd-opencode-jail.md` (Linuxulator dead-end) and this document's "unverified"
    caveats.
