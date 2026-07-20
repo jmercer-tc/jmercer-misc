@@ -221,8 +221,11 @@ includes the one-line `SUPPORTED_ZIG_VERSIONS` patch needed to accept it.
 
 ## 4. Create the `oc-user` account **[carried over]**
 
+Shell is `/usr/local/bin/bash` (installed via `pkg` in section 3, which runs before this
+step):
+
 ```sh
-jexec opencode-fbsd2 pw useradd oc-user -m -s /bin/sh -G wheel
+jexec opencode-fbsd2 pw useradd oc-user -m -s /usr/local/bin/bash -G wheel
 jexec opencode-fbsd2 passwd oc-user
 ```
 
