@@ -175,6 +175,29 @@ this scripted too, `echo 'yourpassword' | jexec opencode-fbsd2 pw usermod root -
 non-interactively by reading the plaintext password from stdin — but there's no real need
 to bother for a one-time setup step like this.)
 
+### 2d. Fix DNS resolution inside the jail **[new]**
+
+A fresh `base.txz` extraction has no `/etc/resolv.conf` — the jail can reach the network
+(it has an IP and route via the host), but hostname lookups (e.g. `pkg install`, `git
+clone`, `curl` against a domain name) will fail until DNS is configured. Point it at public
+resolvers:
+
+```sh
+jexec opencode-fbsd2 sh -c 'cat > /etc/resolv.conf <<EOF
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+EOF'
+```
+
+Verify:
+
+```sh
+jexec opencode-fbsd2 host freebsd.org
+```
+
+Do this **before** section 3 — `pkg install` needs to resolve its package-repo mirror
+hostname, and it'll fail with something like `Could not resolve host` otherwise.
+
 ---
 
 ## 3. Toolchain packages inside the jail **[carried over + zig added]**
