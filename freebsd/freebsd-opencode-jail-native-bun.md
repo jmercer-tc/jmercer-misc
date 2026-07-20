@@ -68,10 +68,52 @@ ifconfig em0 | grep 198.18.51.28
 
 ## 2. Jail creation — no Linuxulator **[carried over, trimmed]**
 
-Use `bsdinstall jail` (or your preferred jail-creation flow) to lay down a base FreeBSD
-userland at e.g. `/jails/opencode-fbsd2`. Do **not** install `linux_base-*`,
-`linux-c7`, or enable `linux` module loading — none of that is needed. Native Bun runs
-directly on FreeBSD.
+Do **not** install `linux_base-*`, `linux-c7`, or enable `linux` module loading — none of
+that is needed. Native Bun runs directly on FreeBSD.
+
+### 2a. Lay down the base userland — non-interactive **[new]**
+
+> **Hit this exact error on the first pass:** `mount.devfs: /jails/opencode-fbsd2/dev: No
+> such file or directory` when running `service jail start` — the base userland was never
+> actually extracted into `/jails/opencode-fbsd2`, so there's no `/dev` for `mount.devfs`
+> to attach to. This step has to happen **before** `service jail start`, not after.
+
+`bsdinstall jail` works but is interactive (a `dialog`-based distribution-set checklist and
+mirror prompt). To skip that entirely, fetch and extract `base.txz` directly for the
+release the host is running:
+
+```sh
+mkdir -p /jails/opencode-fbsd2
+
+REL=$(freebsd-version -u)   # e.g. 14.2-RELEASE
+fetch -o /tmp/base.txz "https://download.freebsd.org/ftp/releases/amd64/amd64/${REL}/base.txz"
+tar -xf /tmp/base.txz -C /jails/opencode-fbsd2 --unlink
+rm /tmp/base.txz
+```
+
+That's the whole base system — no dialog, no prompts, no interactive mirror selection.
+`--unlink` avoids `tar` choking on any pre-existing files if you ever re-run this against
+the same directory.
+
+If you'd rather use `bsdinstall` specifically (e.g. to match exactly how the `.27` jail was
+built), it can also be driven non-interactively by pre-setting the distribution list and
+site instead of accepting the dialog defaults:
+
+```sh
+mkdir -p /jails/opencode-fbsd2
+export BSDINSTALL_CHROOT=/jails/opencode-fbsd2
+export BSDINSTALL_DISTDIR=/tmp/bsdinstall_dist_opencode-fbsd2
+export DISTRIBUTIONS="base.txz"
+export BSDINSTALL_DISTSITE="https://download.freebsd.org/ftp/releases/amd64/amd64/$(freebsd-version -u)/"
+bsdinstall distfetch
+bsdinstall distextract
+```
+
+Either path leaves you with the same result: a populated `/jails/opencode-fbsd2`. The
+`fetch`+`tar` version above is simpler and has fewer moving parts, so it's the recommended
+default.
+
+### 2b. Jail config
 
 Minimal `/etc/jail.conf.d/opencode-fbsd2.conf`:
 
@@ -89,7 +131,7 @@ opencode-fbsd2 {
 }
 ```
 
-Enable and start it:
+### 2c. Enable and start it
 
 ```sh
 sysrc jail_list+="opencode-fbsd2"
