@@ -5,18 +5,29 @@ Start-to-finish build of a **brand-new** jail at **198.18.51.28/32** to run open
 draft (`freebsd-opencode-jail.md`, jail `.27`, which hit a `preadv2 not implemented` dead
 end under Linuxulator).
 
-This document consolidates everything validated in the `.27` jail so far:
-native Bun works fine, the TUI's native `@opentui/core` renderer needs a small patch set
-plus a custom-built FreeBSD `.so`, and one unrelated package (`@ff-labs/fff-bun`) needs a
-lazy-load patch to avoid an eager top-level crash on FreeBSD.
+This document consolidates everything validated in the `.27` jail so far — the TUI's native
+`@opentui/core` renderer needs a small patch set plus a custom-built FreeBSD `.so`, and one
+unrelated package (`@ff-labs/fff-bun`) needs a lazy-load patch to avoid an eager top-level
+crash on FreeBSD — **with one important correction**: `.27`'s "confirmed working" Bun install
+(the `curl -fsSL https://bun.sh/install | bash` script) turned out to have installed a
+**Linux ELF binary of Bun**, not a true native FreeBSD build. That only worked on `.27`
+because `.27` still had the Linuxulator enabled (it started life as a Linuxulator jail), so
+the Linux binary ran fine under Linux emulation. This jail deliberately has no Linuxulator,
+so the exact same install script fails outright (`ELF interpreter
+/lib64/ld-linux-x86-64.so.2 not found`). See section 6 for the real fix — building FreeBSD's
+native `lang/bun` port, since no pre-built binary package exists for it yet.
 
 Status legend used throughout:
-- **[confirmed]** — actually run and observed working on the `.27` jail.
+- **[confirmed]** — actually run and observed working on the `.27` jail. (Caveat added above:
+  where this label was previously applied to Bun's install specifically, treat it as
+  confirmed-under-Linuxulator-emulation, not confirmed-native — see section 6.)
 - **[carried over]** — jail-scaffolding steps reused verbatim from the old guide; mechanically
   the same regardless of Linuxulator, just re-parameterized for the new IP/name.
 - **[unverified]** — assembled from source-code inspection (byte-identical npm package + the
   user's own git diff), not yet run end-to-end. Flagged inline so you know what to double-check
   first.
+- **[in progress]** — actively being worked out on `opencode-fbsd2` right now; not yet
+  confirmed end-to-end, and the steps below may still change once the outcome is known.
 
 ---
 
@@ -332,7 +343,7 @@ is written assuming `jexec`, not SSH, so feel free to skip this section entirely
 
 ---
 
-## 6. Install native Bun **[confirmed on .27, same procedure]**
+## 6. Install native Bun **[in progress]**
 
 Everything from here through section 9 assumes a single persistent interactive shell,
 opened as `oc-user` inside the jail via `jexec` (not SSH):
@@ -347,21 +358,97 @@ within it. If the session ever gets closed, just re-run the `jexec` line above t
 in — since this is a login shell, section 4's `.bash_profile` sets `HOME`/`PATH` correctly
 again automatically, no manual `export` needed on re-entry.
 
-Once you're in that shell:
+### 6a. What doesn't work: the `bun.sh` curl script
 
 ```sh
 curl -fsSL https://bun.sh/install | bash
 ```
 
-This lands at `~/.bun/bin/bun`. Confirmed working version during `.27` testing: **Bun 1.3.14**.
-No Linuxulator, no compat shims — it's a real FreeBSD build of Bun.
+**Do not use this on this jail.** It lands a binary at `~/.bun/bin/bun`, but running it
+fails immediately:
 
-Verify (no manual `export` needed — `.bash_profile` from section 4 already put `~/.bun/bin`
-on `PATH` in this login shell):
+```
+ELF interpreter /lib64/ld-linux-x86-64.so.2 not found, error 2
+Abort trap
+```
+
+`bun.sh`'s install script only ships Linux and macOS builds — on FreeBSD it silently
+downloads the Linux x86_64 build, which needs the Linux dynamic linker
+(`/lib64/ld-linux-x86-64.so.2`) to run. That path only exists under the Linuxulator, which
+this jail deliberately doesn't have. (This is exactly why it appeared to work on `.27` — see
+the note at the top of this document.) If you hit this, `rm -rf ~/.bun` to clean up the
+unusable Linux binary before continuing below.
+
+### 6b. What also doesn't work (yet): `pkg install bun`
+
+FreeBSD does have a native `lang/bun` port (confirmed via FreshPorts), but as of this
+writing it's brand new (added 2026-04-28, last touched 2026-06-30) and has **no pre-built
+binary package** in either the default quarterly repo or the `latest` repo — FreshPorts
+itself notes "Package not present on quarterly... will be in the next quarterly branch but
+not the current one." Both of these were tried and confirmed empty:
+
+```sh
+# quarterly (the jail's default repo) — confirmed: "No packages available to install matching 'bun'"
+jexec opencode-fbsd2 pkg install -y bun
+
+# latest branch, via a repo override — also confirmed empty once the override syntax was
+# fixed to include mirror_type (pkg+ URLs require it explicitly):
+jexec opencode-fbsd2 sh -c '
+cat > /usr/local/etc/pkg/repos/FreeBSD.conf <<EOF
+FreeBSD: {
+  url: "pkg+http://pkg.FreeBSD.org/\${ABI}/latest",
+  mirror_type: "srv",
+  signature_type: "fingerprints",
+  fingerprints: "/usr/share/keys/pkg",
+  enabled: yes
+}
+EOF
+pkg update -f
+pkg install -y bun
+'
+```
+
+If you tried the `latest` override, revert it afterward so the jail's other packages stay on
+a single consistent branch:
+
+```sh
+jexec opencode-fbsd2 rm -f /usr/local/etc/pkg/repos/FreeBSD.conf
+jexec opencode-fbsd2 pkg update -f
+```
+
+### 6c. What's being tried now: build `lang/bun` from the ports tree **[in progress, not yet confirmed]**
+
+Since no binary package exists yet, the port has to be built from source. This looks heavier
+than it actually is: bun's own build *dependencies* (`llvm21`, `cmake`, `ninja`,
+`rust`/`cargo`, `node24`, `npm-node24`) still install as ordinary binary packages
+automatically — only `bun` itself compiles from source, since that's the one piece without a
+package yet. FreshPorts lists no interactive config options for this port, so it shouldn't
+prompt.
+
+```sh
+# populate /usr/ports inside the jail (shallow clone keeps it small)
+jexec opencode-fbsd2 pkg install -y git
+jexec opencode-fbsd2 git clone --depth 1 https://git.FreeBSD.org/ports.git /usr/ports
+
+# build + install (root shell) — expect this to take a while: it fetches a prebuilt
+# WebKit tarball plus bun/node-module/cargo-vendor source tarballs, then compiles bun
+jexec opencode-fbsd2 sh -c 'cd /usr/ports/lang/bun && make install clean'
+```
+
+**This step is currently running on `opencode-fbsd2` and has not yet been confirmed to
+succeed.** Once it finishes, verify:
 
 ```sh
 bun --version
+file $(which bun)
 ```
+
+`file` should report a FreeBSD ELF binary (not the Linux ABI note from 6a). Update this
+section with the actual outcome once confirmed — including whether `bun` lands on `PATH` via
+`/usr/local/bin` automatically (likely, since ports/pkg installs there and `/usr/local/bin`
+is already on `PATH` via `/usr/share/skel/dot.profile`), in which case section 4's
+`.bash_profile` addition of `~/.bun/bin` to `PATH` becomes unnecessary (but harmless — it
+just won't exist) rather than required.
 
 ---
 
@@ -743,20 +830,26 @@ sysrc -x ifconfig_em0_alias0
 
 ## What to pick up on return
 
-1. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
+1. **First and most urgent: confirm section 6c's `make install clean` for `lang/bun`
+   actually succeeded** (`bun --version` and `file $(which bun)` should show a real FreeBSD
+   ELF, not the Linux-ABI error from 6a). Nothing in sections 7 onward can proceed until Bun
+   itself genuinely works natively. Update section 6 with the real outcome — if it succeeded,
+   drop the "in progress" tag and record the confirmed Bun version and where the binary
+   landed (`/usr/local/bin/bun` expected). If it failed, capture the exact build error.
+2. Confirm section 4a's patch files actually landed in `~/patches` under `oc-user` before
    doing anything else in sections 7-8 — `ls -la ~/patches` should show all three `.patch`
    files plus `README.md`.
-2. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
-3. Confirm the `bun patch --commit` in section 8c actually persisted correctly
+3. Run section 9b (TUI sanity check) — this is the single biggest unverified piece.
+4. Confirm the `bun patch --commit` in section 8c actually persisted correctly
    (`cat patches/@opentui%2Fcore@0.4.5.patch` should exist and contain the 3-file diff;
    re-run `bun install` once to confirm the patch reapplies cleanly rather than being
    silently dropped).
-4. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
-5. If 9b fails: capture the exact error — most likely culprits are either the patch not
+5. If 9b works: wire up section 10 (rc.d service) for real and test a reboot.
+6. If 9b fails: capture the exact error — most likely culprits are either the patch not
    applying cleanly to a different `@opentui/core` version than 0.4.5 (check `patch`'s
    output, or the `python3` fallback's printed warnings) or a stale `.so` (arch/ABI
    mismatch) at `$OTUI_ASSET_ROOT/@opentui/core-freebsd-x64/libopentui.so`.
-6. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
+7. Once both CLI/TUI and web mode are confirmed working end-to-end on this fresh jail,
    fold the validated steps back into a single canonical guide, retiring both
    `freebsd-opencode-jail.md` (Linuxulator dead-end) and this document's "unverified"
    caveats.
