@@ -694,11 +694,25 @@ This repo already has one patch of this kind tracked at
 `patches/@ff-labs%2Ffff-bun@0.9.3.patch` — use it as your reference diff if you're
 re-deriving this on a fresh clone rather than reusing patch files from the `.27` jail.
 
-### 7b. Install dependencies
+### 7b. Install dependencies **[confirmed, with one extra prerequisite]**
 
 ```sh
 bun install
 ```
+
+**Extra prerequisite discovered on `opencode-fbsd2`:** `tree-sitter-powershell` (one of the
+tree-sitter grammar packages opencode depends on) has no prebuilt FreeBSD binary and falls
+back to compiling a native addon via `node-gyp`, which needs Python 3 — not present in this
+minimal jail by default. Install it first:
+
+```sh
+jexec opencode-fbsd2 pkg install -y python3
+```
+
+With that in place, `bun install` completed cleanly: 2765 packages installed in ~34s, no
+other native-addon build failures. (Order note: this subsection has to come *before* 7a's
+`bun patch` commands in practice — `bun patch <pkg>` operates on an already-resolved
+dependency in `node_modules`, so it can't run against an empty tree. Do 7b first, then 7a.)
 
 ---
 
