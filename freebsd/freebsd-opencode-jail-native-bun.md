@@ -262,26 +262,33 @@ chown oc-user:oc-user /home/oc-user/.bash_profile
 The patch files referenced later in sections 7a/8b/8c
 (`opentui-monorepo-freebsd-target.patch`, `opentui-core@0.4.5-freebsd-native-file-names.patch`,
 `@ff-labs%2Ffff-bun@0.9.3-existing-reference.patch`, plus their `README.md`) live in the
-`jmercer-misc` repo on GitHub, not on rep-freebsd itself. Now that `oc-user`'s home directory
-exists, pull them down and stage them before going any further.
+`jmercer-misc` repo on GitHub — pushed there from jmercer-wavelo (the work laptop), not
+present on rep-freebsd itself. Now that `oc-user`'s home directory exists, get them staged
+before going any further.
 
-On **rep-freebsd** (the host — not inside the jail yet):
+**Chosen approach: manual copy.** Rather than cloning the repo on rep-freebsd, transfer the
+four files directly from jmercer-wavelo to rep-freebsd by whatever means is convenient
+(`scp`, a USB drive, etc. — jmercer-wavelo and rep-freebsd are deliberately kept separate,
+per earlier discussion, so this is a manual hop between the two, not an automated pull).
+
+End state required before continuing: all four files present at
+**`/home/oc-user/patches/`** inside the jail (i.e. `/jails/opencode-fbsd2/home/oc-user/patches/`
+from the host's point of view), owned by `oc-user`:
+
+- `opentui-monorepo-freebsd-target.patch`
+- `opentui-core@0.4.5-freebsd-native-file-names.patch`
+- `@ff-labs%2Ffff-bun@0.9.3-existing-reference.patch`
+- `README.md`
+
+If you land the files somewhere else on rep-freebsd first (e.g. `/tmp` via `scp`), move them
+into place and fix ownership — since the jail's filesystem is an ordinary directory tree
+from the host's perspective, a plain `mv`/`cp` works, no jail networking required:
 
 ```sh
-# one-time clone, or pull if you already have it
-git clone git@github.com:jmercer-tc/jmercer-misc.git ~/jmercer-misc
-# cd ~/jmercer-misc && git pull   # if it already exists, use this instead
-
-# jails are visible as ordinary directory trees from the host, so a plain cp works —
-# no need for scp or the jail to have networking/SSH up yet
 mkdir -p /jails/opencode-fbsd2/home/oc-user/patches
-cp ~/jmercer-misc/freebsd/patches/*.patch ~/jmercer-misc/freebsd/patches/README.md \
-   /jails/opencode-fbsd2/home/oc-user/patches/
-chown -R 1001:1001 /jails/opencode-fbsd2/home/oc-user/patches
+mv /tmp/*.patch /tmp/README.md /jails/opencode-fbsd2/home/oc-user/patches/
+chown -R oc-user:oc-user /jails/opencode-fbsd2/home/oc-user/patches
 ```
-
-(Replace `1001:1001` with `oc-user`'s actual uid:gid if it differs —
-`jexec opencode-fbsd2 id oc-user` will tell you.)
 
 Verify from inside the jail:
 
