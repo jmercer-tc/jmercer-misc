@@ -232,7 +232,9 @@ jexec opencode-fbsd2 passwd oc-user
 `pw useradd -m` populates the home directory from `/usr/share/skel`, which includes a
 `.profile` (copied in as `~/.profile`) but has no bash-specific skeleton file — bash as a
 login shell reads `~/.bash_profile` instead, and won't pick up `.profile` on its own. Add a
-`.bash_profile` that sources it, so anything the skeleton `.profile` sets still applies:
+`.bash_profile` that sources it, and also puts `~/.bun/bin` on `PATH` (Bun isn't installed
+yet at this point in the guide — that happens in section 6 — but it's harmless to reference
+the directory in `PATH` before it exists):
 
 ```sh
 jexec opencode-fbsd2 sh -c '
@@ -240,16 +242,23 @@ cat > /home/oc-user/.bash_profile <<EOF
 if [ -f "\$HOME/.profile" ]; then
   . "\$HOME/.profile"
 fi
+export PATH="\$HOME/.bun/bin:\$PATH"
 EOF
 chown oc-user:oc-user /home/oc-user/.bash_profile
 '
 ```
 
-> **Critical caveat, confirmed the hard way on `.27`:** `jexec` does **not** source shell
-> profiles or rc files, even for a login-shell user. Every command you run via
-> `jexec -U oc-user opencode-fbsd2 ...` must explicitly export `HOME` and `PATH` itself —
-> don't assume `~/.bun/bin` or anything else from `.profile`/`.bashrc` is on `PATH`. Every
-> command block below that runs as `oc-user` starts with:
+**[confirmed]** `$HOME` is already set correctly for a login shell obtained via
+`jexec -U oc-user opencode-fbsd2 /usr/local/bin/bash` (verified: `echo $HOME` →
+`/home/oc-user`) — no need to `export HOME=...` by hand in that case. `$PATH`, once Bun is
+installed in section 6, will also be correct automatically via this `.bash_profile`, without
+needing to `export PATH=...` by hand either.
+
+> **Caveat that still applies — confirmed the hard way on `.27`:** this only works for an
+> actual **login shell** (`jexec -U oc-user opencode-fbsd2 /usr/local/bin/bash`, as used from
+> section 6 onward). One-shot, non-login `jexec` invocations that specify a command directly
+> (e.g. `jexec -U oc-user opencode-fbsd2 some-command`) do **not** go through
+> `.bash_profile` at all, so `HOME`/`PATH` still need to be set explicitly in those:
 > ```sh
 > export HOME=/home/oc-user
 > export PATH="$HOME/.bun/bin:$PATH"
@@ -332,11 +341,11 @@ opened as `oc-user` inside the jail via `jexec` (not SSH):
 jexec -U oc-user opencode-fbsd2 /usr/local/bin/bash
 ```
 
-Stay in that one shell session for the rest of sections 6-9 — the `export`/`cd` state in
-each code block below carries over from one command to the next within it. If the session
-ever gets closed, just re-run the `jexec` line above to get back in; you'll need to re-run
-the `export HOME=...`/`export PATH=...` lines too since that state doesn't persist across
-separate `jexec` invocations.
+Stay in that one shell session for the rest of sections 6-9 — the `cd` state (and anything
+beyond what `.bash_profile` already sets up) carries over from one command to the next
+within it. If the session ever gets closed, just re-run the `jexec` line above to get back
+in — since this is a login shell, section 4's `.bash_profile` sets `HOME`/`PATH` correctly
+again automatically, no manual `export` needed on re-entry.
 
 Once you're in that shell:
 
@@ -347,11 +356,10 @@ curl -fsSL https://bun.sh/install | bash
 This lands at `~/.bun/bin/bun`. Confirmed working version during `.27` testing: **Bun 1.3.14**.
 No Linuxulator, no compat shims — it's a real FreeBSD build of Bun.
 
-Verify:
+Verify (no manual `export` needed — `.bash_profile` from section 4 already put `~/.bun/bin`
+on `PATH` in this login shell):
 
 ```sh
-export HOME=/home/oc-user
-export PATH="$HOME/.bun/bin:$PATH"
 bun --version
 ```
 
@@ -360,8 +368,6 @@ bun --version
 ## 7. Clone and build opencode **[confirmed for install; TUI render unverified]**
 
 ```sh
-export HOME=/home/oc-user
-export PATH="$HOME/.bun/bin:$PATH"
 mkdir -p ~/wip
 cd ~/wip
 git clone https://github.com/anomalyco/opencode.git opencode-src
@@ -632,9 +638,10 @@ This creates a `patchedDependencies` entry, same convention as the existing
 
 ## 9. Set `OTUI_ASSET_ROOT` and sanity-check
 
+`HOME`/`PATH` are already correct via `.bash_profile` (section 4) in this login shell;
+`OTUI_ASSET_ROOT` is new and still needs to be set explicitly:
+
 ```sh
-export HOME=/home/oc-user
-export PATH="$HOME/.bun/bin:$PATH"
 export OTUI_ASSET_ROOT="$HOME/.otui-assets"
 cd ~/wip/opencode-src
 ```
