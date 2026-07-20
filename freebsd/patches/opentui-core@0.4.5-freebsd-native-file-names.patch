@@ -1,0 +1,33 @@
+--- a/node_modules/@opentui/core/node-assets.js
++++ b/node_modules/@opentui/core/node-assets.js
+@@ -7,6 +7,7 @@
+ var NATIVE_FILE_NAMES = {
+   darwin: "libopentui.dylib",
+   linux: "libopentui.so",
++  freebsd: "libopentui.so",
+   win32: "opentui.dll"
+ };
+ function getNativeAssetDescriptor(target) {
+
+--- a/node_modules/@opentui/core/chunk-bun-t2myhmwd.js
++++ b/node_modules/@opentui/core/chunk-bun-t2myhmwd.js
+@@ -7899,6 +7899,7 @@
+ var NATIVE_FILE_NAMES = {
+   darwin: "libopentui.dylib",
+   linux: "libopentui.so",
++  freebsd: "libopentui.so",
+   win32: "opentui.dll"
+ };
+ function getNativeAssetDescriptor(target) {
+
+--- a/node_modules/@opentui/core/chunk-node-q0cwyvm9.js
++++ b/node_modules/@opentui/core/chunk-node-q0cwyvm9.js
+@@ -7908,6 +7908,7 @@
+ var NATIVE_FILE_NAMES = {
+   darwin: "libopentui.dylib",
+   linux: "libopentui.so",
++  freebsd: "libopentui.so",
+   win32: "opentui.dll"
+ };
+ function getNativeAssetDescriptor(target) {
+
