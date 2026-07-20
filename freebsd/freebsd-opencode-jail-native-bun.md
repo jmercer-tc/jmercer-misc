@@ -452,6 +452,13 @@ compiling something huge (`llvm`, `rust`), it's worth `Ctrl-C`-ing it and restar
 sequence above rather than waiting it out — a from-source `llvm21`/`rust` build can take
 hours on top of what building `bun` itself needs.
 
+**For any future rebuild, use `make install package clean` instead of plain `make install
+clean`** (see 6d) — `bsd.port.mk` has a `package` target that stages the build and produces a
+distributable `.pkg` archive directly, without a separate `pkg create` step afterward. The
+in-flight build on `opencode-fbsd2` right now was started with plain `make install clean`
+(before this was worked out), so it still needs the manual `pkg create -o` step in 6d if it
+succeeds — this simplification is for the *next* jail/rebuild, not this one.
+
 **This step is currently running on `opencode-fbsd2` and has not yet been confirmed to
 succeed.** Once it finishes, verify:
 
@@ -530,11 +537,17 @@ Linuxulator-free between builds:
 ```sh
 kldstat | grep -i linux
 mount -t linprocfs linproc /jails/opencode-fbsd2/proc
+# /jails/opencode-fbsd2/sys is a symlink to usr/src/sys (standard FreeBSD skeleton layout);
+# this jail has no /usr/src populated, so the target dir has to be created first or the
+# linsysfs mount fails trying to follow the symlink ("No such file or directory")
+mkdir -p /jails/opencode-fbsd2/usr/src/sys
 mount -t linsysfs linsys /jails/opencode-fbsd2/sys
+mount | grep opencode-fbsd2   # confirm both linprocfs and linsysfs show up
 ```
 
-then retry the `make install-missing-packages` / `make build` sequence from 6c. Once it
-succeeds (and section 6d's package is cached), unmount both:
+then retry the `make install-missing-packages` / `make install clean` sequence from 6c
+(currently running — this is the in-flight build). Once it succeeds (and section 6d's package
+is cached), unmount both:
 
 ```sh
 umount /jails/opencode-fbsd2/proc
@@ -560,6 +573,15 @@ Build a distributable `.pkg` from the already-installed copy (run inside the jai
 jexec opencode-fbsd2 mkdir -p /root/pkg-cache
 jexec opencode-fbsd2 pkg create -o /root/pkg-cache bun
 ```
+
+**For future rebuilds, skip this manual `pkg create` step entirely** — `bsd.port.mk` has its
+own `package` target that stages the build and writes a `.pkg` archive directly, no separate
+command needed. Use `make install package clean` instead of plain `make install clean` in 6c,
+and the archive lands at `/usr/ports/packages/All/bun-*.pkg` inside the jail (i.e.
+`/jails/<jail-name>/usr/ports/packages/All/bun-*.pkg` from the host) — just `cp` that straight
+to `/usr/local/pkg-cache` on rep-laptop. The `pkg create -o` approach above is what this
+*current* in-flight build needs (it was started before this shortcut was worked out), but
+isn't the preferred method going forward.
 
 This produces something like `/root/pkg-cache/bun-1.3.14_3.pkg` inside the jail. Copy it out
 to a persistent spot on rep-laptop itself (**not** inside any jail's directory tree, so it
