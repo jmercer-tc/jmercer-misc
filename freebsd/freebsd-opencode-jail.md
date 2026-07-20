@@ -371,6 +371,77 @@ the jail itself is only reachable via SSH, both CLI and web access are
 gated by the same SSH authentication — there's no separate unauthenticated
 surface exposed on the network.
 
+## Alternative build: native `lang/bun` instead of Linuxulator
+
+Given the confirmed `preadv2` blocker under Bun-via-Linuxulator (see
+"Known rough edges" below), this is the path being tried next on a
+rebuilt jail — using FreeBSD's native `lang/bun` port instead of Bun
+running as a Linux binary under the Linuxulator. It reuses steps 1, 5, 6,
+8, 9, and 10 above unchanged, but skips or simplifies everything that
+existed purely to support the Linux ABI layer.
+
+**Verify this first, before rebuilding anything.** Independent of the
+`preadv2` issue, opencode's own installer/runtime has hardcoded platform
+checks that (as of this writing) only allow `linux`/`darwin`/`win32` (see
+"Known rough edges" below). Under native FreeBSD Bun, `process.platform`
+will report `freebsd`, not `linux` — so opencode itself may refuse to
+install or start, regardless of whether Bun works perfectly. Test this in
+isolation before committing to a full rebuild around this approach:
+
+```
+bun -e 'console.log(process.platform)'
+```
+
+then try opencode's own install script and see whether it rejects the
+platform outright. If it does, this path needs a workaround (patching the
+platform check locally, or an upstream flag/fix) before anything below
+matters — worth confirming that first rather than discovering it after
+rebuilding the whole jail.
+
+### What's different from the Linuxulator build
+
+- **Skip step 2 entirely.** No Linuxulator, no `linux_enable`, nothing —
+  native Bun doesn't touch it.
+- **Step 3 simplifies.** The jail no longer needs `linux = "new"`, nor any
+  of the `/compat/linux` mounts (`devfs`, `linprocfs`, `linsysfs`,
+  `fdescfs` with `linrdlnk`, `tmpfs`) — those existed solely to support
+  the Linux ABI layer, which is no longer in the picture. A plain jail
+  with just the standard `mount.devfs` is enough:
+
+  ```
+  opencode {
+      host.hostname = "opencode.local";
+      ip4.addr      = "em0|198.18.51.27/24";
+      path          = "/jails/opencode";
+      exec.start    = "/bin/sh /etc/rc";
+      exec.stop     = "/bin/sh /etc/rc.shutdown";
+      mount.devfs;
+  }
+  ```
+
+  No matching `mount.fstab`/`exec.prepare` compat-mount directories are
+  needed either, since there's no `/compat/linux` tree to populate.
+
+- **Skip step 4 entirely.** No `linux-rl9`/`linux-c7` userland to
+  install — there's no Linux binary that needs one.
+- **Step 5 (toolchain) is unchanged.** `git`/`curl`/`jq`/`opentofu`/
+  `ansible`/etc. install as ordinary FreeBSD packages the same way
+  regardless of how Bun itself gets installed.
+- **Step 6 (create the opencode user) is unchanged.**
+- **Step 7 changes to a native package install:**
+
+  ```
+  jexec opencode pkg install bun
+  ```
+
+  or build `lang/bun` from ports directly if you need a newer version
+  than what's in the current quarterly/latest package branch. Then
+  install opencode as usual — but resolve the platform-check caveat above
+  first, since this is the step most likely to surface it.
+- **Steps 8-10 (SSH access, the `opencode-web` script, day-to-day usage)
+  are unchanged** — none of that plumbing was ever specific to
+  Linuxulator.
+
 ## Known rough edges
 
 - **Confirmed blocker: opencode hangs permanently on any real network I/O
