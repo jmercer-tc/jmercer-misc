@@ -46,6 +46,7 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | Ticket | Type | Summary | Status | Notes |
 |---|---|---|---|---|
 | SECO-3643 | Related | allowed_address_pairs monitoring proposal | **Ready for Development** | Only ticket actively queued |
+| SECO-3699 | Task | dish_db_dwh — Postgres tcp/55432 from Dish partner ranges | Backlog | New 2026-07-23; standalone task, no parent — requests Shepherd sec-policy for pre-existing rules |
 
 **Downstream / linked tickets:**
 
