@@ -86,6 +86,13 @@ PATCHED_MINOR_BY_MAJOR = {
 
 CVE_ID = "CVE-2026-2005"
 
+# Matches exactly "postgresql" or "postgresql-<digits>" (e.g. postgresql-14,
+# postgresql-16), case-insensitively -- the actual PostgreSQL server package
+# across common Linux distros, as opposed to related packages that also
+# happen to contain "postgresql" (postgresql-contrib, postgresql-client,
+# libpq5, pgadmin4, etc.) which we don't want in the report.
+PG_SERVER_PACKAGE_NAME_RE = re.compile(r"^postgresql(-[0-9]*)?$", re.IGNORECASE)
+
 
 def log(*args, **kwargs):
     """Print informational/summary/warning output to stderr, so stdout stays
@@ -218,9 +225,13 @@ def discover_postgres_applications(base_url, token):
     # a leading *and* trailing wildcard on the same property (e.g. *'*ostgre*')
     # is rejected with HTTP 400. Regular string filters are case-insensitive
     # by default (only the bracketed exact-match form is case-sensitive), so
-    # a single trailing wildcard on the full "postgres" token is sufficient
-    # and matches PostgreSQL/postgresql/POSTGRESQL alike.
-    query_params = {"filter": "name:*'postgres*'"}
+    # a single trailing wildcard is sufficient. We only want the "postgresql"
+    # server packages (not postgresql-contrib, libpq, pgadmin, etc.), so the
+    # server-side filter is narrowed to names containing "postgresql" -- the
+    # exact-match narrowing to just "postgresql" / "postgresql-<version>" is
+    # then done client-side below, since FQL wildcards can't express a
+    # digits-only suffix.
+    query_params = {"filter": "name:*'postgresql*'"}
     # This endpoint's max "limit" is 100 (HTTP 400: "500 is an invalid limit,
     # must be between 1 and 100"), well under paginated_query()'s old default
     # of 500.
@@ -229,6 +240,15 @@ def discover_postgres_applications(base_url, token):
         return []
 
     apps = batch_get_entities(base_url, token, "/discover/entities/applications/v1", app_ids, required_scope=scope)
+
+    # Narrow to just the PostgreSQL server package itself: "postgresql" or
+    # "postgresql-<digits>" (e.g. postgresql-14, postgresql-16). This
+    # excludes related-but-different packages like postgresql-contrib,
+    # postgresql-client, libpq5, pgadmin4, etc. that also contain "postgresql"
+    # and would otherwise show up as noise in the report.
+    apps = [a for a in apps if PG_SERVER_PACKAGE_NAME_RE.match(a.get("name") or "")]
+    if not apps:
+        return []
 
     # Resolve host_id -> hostname/os via Discover Hosts entities
     host_ids = sorted({a.get("host_id") for a in apps if a.get("host_id")})
