@@ -366,6 +366,13 @@ def main():
              "to. If given, the script verifies this before querying and refuses to "
              "proceed on a mismatch, printing what needs to be created instead.",
     )
+
+    if len(sys.argv) == 1:
+        # Bare invocation, no flags at all — show usage/help instead of
+        # silently running a full scan against defaults.
+        parser.print_help()
+        sys.exit(0)
+
     args = parser.parse_args()
 
     client_id = os.environ.get("FALCON_CLIENT_ID")
