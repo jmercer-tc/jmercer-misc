@@ -325,7 +325,39 @@ def classify(row):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Inventory Postgres hosts in CrowdStrike Falcon and flag CVE-2026-2005 exposure.")
+    epilog = (
+        "environment variables (required):\n"
+        "  FALCON_CLIENT_ID       Falcon API client ID\n"
+        "  FALCON_CLIENT_SECRET   Falcon API client secret\n"
+        "  FALCON_BASE_URL        Falcon API base URL for your cloud region\n"
+        "                         (default: https://api.crowdstrike.com)\n"
+        "                           us-1      https://api.crowdstrike.com\n"
+        "                           us-2      https://api.us-2.crowdstrike.com\n"
+        "                           eu-1      https://api.eu-1.crowdstrike.com\n"
+        "                           us-gov-1  https://api.laggar.gcw.crowdstrike.com\n"
+        "\n"
+        "  Tip: `source ./falcon.rc` prompts for and exports the client ID/secret\n"
+        "  interactively; nothing is ever written to disk.\n"
+        "\n"
+        "required API scopes (read-only):\n"
+        f"{REQUIRED_SCOPES_TEXT}\n"
+        "\n"
+        "  Create the API client in the Falcon console under:\n"
+        "    Support and resources > API clients and keys\n"
+        "  If these scopes don't appear under a parent CID, try creating the\n"
+        "  client directly under the relevant child CID instead.\n"
+        "\n"
+        "example:\n"
+        "  source ./falcon.rc\n"
+        "  ./crowdstrike_postgres_cve_2026_2005_scan.py --cid <CID> --out report.csv\n"
+        "\n"
+        f"reference: https://www.postgresql.org/support/security/{CVE_ID}"
+    )
+    parser = argparse.ArgumentParser(
+        description="Inventory Postgres hosts in CrowdStrike Falcon and flag CVE-2026-2005 exposure.",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--out", default="cve_2026_2005_postgres_report.csv", help="Output CSV path")
     parser.add_argument(
         "--cid",
