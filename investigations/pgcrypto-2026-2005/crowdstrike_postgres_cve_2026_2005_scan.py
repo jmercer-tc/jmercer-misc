@@ -55,15 +55,24 @@ Region base URLs:
 
 Usage
 -----
-    python3 crowdstrike_postgres_cve_2026_2005_scan.py [--out report.csv]
+    python3 crowdstrike_postgres_cve_2026_2005_scan.py [--cve CVE-YYYY-NNNNN] [--out report.csv]
+
+--cve defaults to CVE-2026-2005. Falcon Spotlight is queried directly for
+whichever CVE you pick, but the version-based VULNERABLE/PATCHED
+classification is calibrated specifically for CVE-2026-2005's patched
+versions -- pick a different CVE and only direct Spotlight matches count as
+vulnerable (everything else is NOT_EVALUATED, not silently assumed safe).
 
 Output
 ------
-Prints a summary table to stdout and writes a CSV report with columns:
-    hostname, host_id, os_version, application_name, application_version,
+Prints a summary to stderr and writes a CSV report -- containing ONLY hosts
+found vulnerable to the selected CVE -- with columns:
+    hostname, host_id, aid, os_version, application_name, application_version,
     parsed_major, parsed_minor, patched_minor_for_major, status, source
 
-`status` is one of: VULNERABLE, PATCHED, UNKNOWN_VERSION, SPOTLIGHT_MATCH
+`status` is one of: VULNERABLE, PATCHED, UNKNOWN_VERSION, SPOTLIGHT_MATCH,
+NOT_EVALUATED (only PATCHED/UNKNOWN_VERSION/NOT_EVALUATED hosts are held back
+from the CSV -- they're still counted in the stderr summary).
 """
 
 import csv
@@ -85,7 +94,16 @@ PATCHED_MINOR_BY_MAJOR = {
     18: 2,
 }
 
-CVE_ID = "CVE-2026-2005"
+# The patched-version thresholds above are calibrated specifically for
+# CVE-2026-2005. --cve lets you point Falcon Spotlight's direct query at a
+# different CVE, but Discover-based version classification (VULNERABLE vs.
+# PATCHED via PATCHED_MINOR_BY_MAJOR) only makes sense for this one; see
+# classify() and the NOT_EVALUATED status.
+DEFAULT_CVE_ID = "CVE-2026-2005"
+
+# The CVE actually being checked for this run -- defaults to DEFAULT_CVE_ID,
+# overridden by --cve in main().
+CVE_ID = DEFAULT_CVE_ID
 
 # Matches exactly "postgresql" or "postgresql-<digits>" (e.g. postgresql-14,
 # postgresql-16), case-insensitively -- the actual PostgreSQL server package
@@ -349,8 +367,20 @@ def classify(row):
     row["parsed_minor"] = minor
 
     if row["source"] == "spotlight_vulnerabilities":
+        # Spotlight already told us directly that this host matches CVE_ID
+        # (whatever it's currently set to via --cve), regardless of which CVE
+        # that is -- this doesn't depend on PATCHED_MINOR_BY_MAJOR at all.
         row["status"] = "SPOTLIGHT_MATCH"
         row["patched_minor_for_major"] = PATCHED_MINOR_BY_MAJOR.get(major, "")
+        return row
+
+    if CVE_ID != DEFAULT_CVE_ID:
+        # PATCHED_MINOR_BY_MAJOR's thresholds are specific to CVE-2026-2005;
+        # they don't apply to whatever CVE the user pointed --cve at, so
+        # don't pretend to classify Discover-only rows (no direct Spotlight
+        # match) by version comparison here -- that would just be wrong.
+        row["status"] = "NOT_EVALUATED"
+        row["patched_minor_for_major"] = ""
         return row
 
     if major is None or major not in PATCHED_MINOR_BY_MAJOR:
@@ -390,8 +420,9 @@ def main():
         "example:\n"
         "  source ./falcon.rc\n"
         "  ./crowdstrike_postgres_cve_2026_2005_scan.py --out report.csv\n"
+        "  ./crowdstrike_postgres_cve_2026_2005_scan.py --cve CVE-2024-10977 --out -\n"
         "\n"
-        f"reference: https://www.postgresql.org/support/security/{CVE_ID}"
+        f"reference: https://www.postgresql.org/support/security/{DEFAULT_CVE_ID}"
     )
     parser = argparse.ArgumentParser(
         description="Inventory Postgres hosts in CrowdStrike Falcon and flag CVE-2026-2005 exposure.",
@@ -404,6 +435,18 @@ def main():
         help="Output CSV path, or - to write the CSV to stdout instead of a "
              "file (all [info]/[summary]/[warn] messages go to stderr either way, "
              "so stdout stays clean for piping).",
+    )
+    parser.add_argument(
+        "--cve",
+        default=DEFAULT_CVE_ID,
+        metavar="CVE-YYYY-NNNNN",
+        help=f"CVE to check for (default: {DEFAULT_CVE_ID}). Falcon Spotlight is "
+             "always queried directly for this CVE ID, regardless of which one you "
+             f"pick. The version-based classification (VULNERABLE vs. PATCHED) is "
+             f"calibrated specifically for {DEFAULT_CVE_ID}'s patched-version "
+             "thresholds, though, so for any other CVE only direct Spotlight "
+             "matches are reported as vulnerable -- everything else is left as "
+             "NOT_EVALUATED rather than guessed at.",
     )
     parser.add_argument(
         "--debug",
@@ -421,8 +464,17 @@ def main():
 
     args = parser.parse_args()
 
-    global DEBUG
+    global DEBUG, CVE_ID
     DEBUG = args.debug
+    CVE_ID = args.cve
+
+    if CVE_ID != DEFAULT_CVE_ID:
+        log(f"[warn] --cve {CVE_ID} was specified; version-based classification "
+            f"(VULNERABLE vs. PATCHED) is calibrated specifically for "
+            f"{DEFAULT_CVE_ID}'s patched-version thresholds and doesn't apply here. "
+            f"Only hosts Falcon Spotlight directly matches to {CVE_ID} will be "
+            "reported as vulnerable; the report will otherwise omit unmatched hosts "
+            "rather than falsely calling them safe.")
 
     client_id = os.environ.get("FALCON_CLIENT_ID")
     client_secret = os.environ.get("FALCON_CLIENT_SECRET")
@@ -459,6 +511,14 @@ def main():
 
     all_rows = [classify(r) for r in rows + spotlight_rows]
 
+    # The report itself only lists hosts actually vulnerable to CVE_ID --
+    # PATCHED/UNKNOWN_VERSION/NOT_EVALUATED hosts are summarized in the
+    # stderr diagnostics below (so that information isn't lost), but aren't
+    # written into the CSV.
+    vulnerable = [r for r in all_rows if r["status"] in ("VULNERABLE", "SPOTLIGHT_MATCH")]
+    unknown = [r for r in all_rows if r["status"] == "UNKNOWN_VERSION"]
+    not_evaluated = [r for r in all_rows if r["status"] == "NOT_EVALUATED"]
+
     fieldnames = [
         "hostname", "host_id", "aid", "os_version", "application_name", "application_version",
         "parsed_major", "parsed_minor", "patched_minor_for_major", "status", "source",
@@ -466,30 +526,32 @@ def main():
     if args.out == "-":
         writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(all_rows)
+        writer.writerows(vulnerable)
         sys.stdout.flush()
     else:
         with open(args.out, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(all_rows)
-
-    vulnerable = [r for r in all_rows if r["status"] in ("VULNERABLE", "SPOTLIGHT_MATCH")]
-    unknown = [r for r in all_rows if r["status"] == "UNKNOWN_VERSION"]
+            writer.writerows(vulnerable)
 
     report_destination = "stdout" if args.out == "-" else args.out
     log(f"\n[summary] Total Postgres instances found: {len(all_rows)}")
     log(f"[summary] Flagged as vulnerable / matched to {CVE_ID}: {len(vulnerable)}")
+    if not_evaluated:
+        log(f"[summary] Not evaluated for {CVE_ID} (Discover-only, no direct Spotlight "
+            f"match -- see --cve warning above): {len(not_evaluated)}")
     log(f"[summary] Version could not be parsed (needs manual check): {len(unknown)}")
-    log(f"[summary] Full report written to: {report_destination}\n")
+    log(f"[summary] Report (vulnerable hosts only) written to: {report_destination}\n")
 
     if vulnerable:
         log("Vulnerable / matched hosts:")
         for r in vulnerable:
             log(f"  - {r['hostname']} (aid={r['aid']}): {r['application_name']} {r['application_version']} [{r['status']}]")
+    else:
+        log(f"No hosts found vulnerable to {CVE_ID}.")
 
     if unknown:
-        log("\nHosts with unparseable version strings (check manually):")
+        log("\nHosts with unparseable version strings (check manually, not included in the report above):")
         for r in unknown:
             log(f"  - {r['hostname']} (aid={r['aid']}): {r['application_name']} {r['application_version']!r}")
 
