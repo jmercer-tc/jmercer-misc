@@ -32,9 +32,9 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | SECO-3673 | Sub-task | dev_hoofprints default-SG cleanup | Backlog | Correctly scoped: 203 of 567 non-compliant rules are default-SG |
 | SECO-3674 | Sub-task | prod_bareos default-SG | **Done** | Confirmed via fresh recount — 0 remaining default-SG rows |
 | SECO-3675 | Sub-task | trs_ry_prod remediation | Backlog | |
-| SECO-3676 | Sub-task | Global ICMP policy proposal (791 rules) | Backlog | **Rejected by Shepherd eng 2026-07-15** — "Not a feature/bug" |
-| SECO-3677 | Sub-task | c18e / Wavelo Nomad tenants (~1,890 rules) | Backlog | **Rejected**, same reason/date |
-| SECO-3678 | Sub-task | Consul policies (111 rules) | Backlog | **Rejected**, same reason/date |
+| SECO-3676 | Sub-task | Global ICMP policy proposal (791 rules) | Backlog | Shepherd eng declined 2026-07-15 ("Not a feature/bug") — **needs to be re-ticketed to the owning tenant teams** |
+| SECO-3677 | Sub-task | c18e / Wavelo Nomad tenants (~1,890 rules) | Backlog | Same decline, same date — **needs to be re-ticketed to the owning tenant teams** |
+| SECO-3678 | Sub-task | Consul policies (111 rules) | Backlog | Same decline, same date — **needs to be re-ticketed to the owning tenant teams** |
 | SECO-3680 | Sub-task | tch-ssh-tunnel / DMNS-554 | Backlog | |
 | SECO-3681 | Sub-task | jmcdonald-dev decommission | Backlog | Blocked on Joe McDonald (CR-43285, CR-43375) |
 | SECO-3683 | Sub-task | Remove 216.40.38.249/32, non-FIP VMs | Backlog, **on hold** | Premise was wrong — needs revision (see Section 3, "Challenges quantifying, organizing, and prioritizing remediation," below) |
