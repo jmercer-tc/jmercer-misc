@@ -104,6 +104,11 @@ class FalconAuthError(Exception):
     """Credentials are missing, invalid, or lack a required API scope."""
 
 
+class FalconApiError(Exception):
+    """A non-auth Falcon API error (400, 500, etc.) — carries the API's own
+    error detail, which plain requests.HTTPError discards."""
+
+
 def _describe_falcon_error(resp) -> str:
     """Pull the human-readable error message(s) out of a Falcon API error
     body, if present. Falls back to the raw response text."""
@@ -119,7 +124,8 @@ def _describe_falcon_error(resp) -> str:
 
 def _check_response(resp, context: str, required_scope: str = None):
     """Raise a clear, actionable FalconAuthError for auth/permission failures;
-    otherwise fall back to requests' normal HTTPError for other failures."""
+    raise FalconApiError (with the Falcon API's own error detail) for any
+    other 4xx/5xx, since plain requests.HTTPError discards the response body."""
     if resp.status_code == 401:
         raise FalconAuthError(
             f"Authentication failed while {context} (HTTP 401): {_describe_falcon_error(resp)}. "
@@ -132,7 +138,10 @@ def _check_response(resp, context: str, required_scope: str = None):
         raise FalconAuthError(
             f"Permission denied while {context} (HTTP 403): {_describe_falcon_error(resp)}.{scope_hint}"
         )
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        raise FalconApiError(
+            f"Falcon API request failed while {context} (HTTP {resp.status_code}): {_describe_falcon_error(resp)}"
+        )
 
 
 def get_token(base_url: str, client_id: str, client_secret: str) -> str:
@@ -243,10 +252,10 @@ def spotlight_cve_matches(base_url, token):
             return []
         vulns = batch_get_entities(base_url, token, "/spotlight/entities/vulnerabilities/v2", vuln_ids, required_scope=scope)
     except FalconAuthError as e:
-        print(f"[warn] {e}\n[warn] Skipping Spotlight cross-check; Discover-based results below are unaffected.", file=sys.stderr)
+        log(f"[warn] {e}\n[warn] Skipping Spotlight cross-check; Discover-based results below are unaffected.")
         return []
-    except requests.HTTPError as e:
-        print(f"[warn] Spotlight query failed ({e}); skipping Spotlight cross-check.", file=sys.stderr)
+    except (FalconApiError, requests.HTTPError) as e:
+        log(f"[warn] Spotlight query failed ({e}); skipping Spotlight cross-check.")
         return []
 
     rows = []
@@ -356,7 +365,7 @@ def main():
     try:
         log(f"[info] Authenticating against {base_url} ...")
         token = get_token(base_url, client_id, client_secret)
-    except FalconAuthError as e:
+    except (FalconAuthError, FalconApiError) as e:
         sys.exit(f"[error] {e}")
     except requests.HTTPError as e:
         sys.exit(f"[error] Falcon API request failed: {e}")
@@ -366,7 +375,7 @@ def main():
     try:
         log("[info] Querying Falcon Discover for installed PostgreSQL applications ...")
         rows = discover_postgres_applications(base_url, token)
-    except FalconAuthError as e:
+    except (FalconAuthError, FalconApiError) as e:
         sys.exit(f"[error] {e}")
     except requests.HTTPError as e:
         sys.exit(f"[error] Falcon API request failed: {e}")
