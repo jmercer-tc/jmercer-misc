@@ -86,6 +86,13 @@ PATCHED_MINOR_BY_MAJOR = {
 
 CVE_ID = "CVE-2026-2005"
 
+
+def log(*args, **kwargs):
+    """Print informational/summary/warning output to stderr, so stdout stays
+    reserved for the CSV report when --out - is used to pipe it elsewhere."""
+    print(*args, file=sys.stderr, **kwargs)
+
+
 REQUIRED_SCOPES_TEXT = (
     "  - Hosts: READ\n"
     "  - Discover (Assets): READ         (may show simply as \"Assets\")\n"
@@ -323,7 +330,13 @@ def main():
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--out", default="cve_2026_2005_postgres_report.csv", help="Output CSV path")
+    parser.add_argument(
+        "--out",
+        default="cve_2026_2005_postgres_report.csv",
+        help="Output CSV path, or - to write the CSV to stdout instead of a "
+             "file (all [info]/[summary]/[warn] messages go to stderr either way, "
+             "so stdout stays clean for piping).",
+    )
 
     if len(sys.argv) == 1:
         # Bare invocation, no flags at all — show usage/help instead of
@@ -341,7 +354,7 @@ def main():
         sys.exit("Set FALCON_CLIENT_ID and FALCON_CLIENT_SECRET environment variables before running.")
 
     try:
-        print(f"[info] Authenticating against {base_url} ...")
+        log(f"[info] Authenticating against {base_url} ...")
         token = get_token(base_url, client_id, client_secret)
     except FalconAuthError as e:
         sys.exit(f"[error] {e}")
@@ -351,7 +364,7 @@ def main():
         sys.exit(f"[error] Could not reach the Falcon API at {base_url}: {e}")
 
     try:
-        print("[info] Querying Falcon Discover for installed PostgreSQL applications ...")
+        log("[info] Querying Falcon Discover for installed PostgreSQL applications ...")
         rows = discover_postgres_applications(base_url, token)
     except FalconAuthError as e:
         sys.exit(f"[error] {e}")
@@ -360,11 +373,11 @@ def main():
     except requests.RequestException as e:
         sys.exit(f"[error] Could not reach the Falcon API at {base_url}: {e}")
 
-    print(f"[info] Found {len(rows)} PostgreSQL application instance(s) via Discover.")
+    log(f"[info] Found {len(rows)} PostgreSQL application instance(s) via Discover.")
 
-    print(f"[info] Cross-checking Falcon Spotlight for direct {CVE_ID} matches ...")
+    log(f"[info] Cross-checking Falcon Spotlight for direct {CVE_ID} matches ...")
     spotlight_rows = spotlight_cve_matches(base_url, token)
-    print(f"[info] Found {len(spotlight_rows)} Spotlight match(es) for {CVE_ID}.")
+    log(f"[info] Found {len(spotlight_rows)} Spotlight match(es) for {CVE_ID}.")
 
     all_rows = [classify(r) for r in rows + spotlight_rows]
 
@@ -372,28 +385,35 @@ def main():
         "hostname", "host_id", "os_version", "application_name", "application_version",
         "parsed_major", "parsed_minor", "patched_minor_for_major", "status", "source",
     ]
-    with open(args.out, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+    if args.out == "-":
+        writer = csv.DictWriter(sys.stdout, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(all_rows)
+        sys.stdout.flush()
+    else:
+        with open(args.out, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_rows)
 
     vulnerable = [r for r in all_rows if r["status"] in ("VULNERABLE", "SPOTLIGHT_MATCH")]
     unknown = [r for r in all_rows if r["status"] == "UNKNOWN_VERSION"]
 
-    print(f"\n[summary] Total Postgres instances found: {len(all_rows)}")
-    print(f"[summary] Flagged as vulnerable / matched to {CVE_ID}: {len(vulnerable)}")
-    print(f"[summary] Version could not be parsed (needs manual check): {len(unknown)}")
-    print(f"[summary] Full report written to: {args.out}\n")
+    report_destination = "stdout" if args.out == "-" else args.out
+    log(f"\n[summary] Total Postgres instances found: {len(all_rows)}")
+    log(f"[summary] Flagged as vulnerable / matched to {CVE_ID}: {len(vulnerable)}")
+    log(f"[summary] Version could not be parsed (needs manual check): {len(unknown)}")
+    log(f"[summary] Full report written to: {report_destination}\n")
 
     if vulnerable:
-        print("Vulnerable / matched hosts:")
+        log("Vulnerable / matched hosts:")
         for r in vulnerable:
-            print(f"  - {r['hostname']} ({r['host_id']}): {r['application_name']} {r['application_version']} [{r['status']}]")
+            log(f"  - {r['hostname']} ({r['host_id']}): {r['application_name']} {r['application_version']} [{r['status']}]")
 
     if unknown:
-        print("\nHosts with unparseable version strings (check manually):")
+        log("\nHosts with unparseable version strings (check manually):")
         for r in unknown:
-            print(f"  - {r['hostname']} ({r['host_id']}): {r['application_name']} {r['application_version']!r}")
+            log(f"  - {r['hostname']} ({r['host_id']}): {r['application_name']} {r['application_version']!r}")
 
 
 if __name__ == "__main__":
