@@ -228,7 +228,14 @@ def discover_postgres_applications(base_url, token):
     PostgreSQL installed, and pull the reported version string.
     """
     scope = "Discover (Assets): READ"
-    query_params = {"filter": "application_name:*'*ostgre*'"}
+    # FQL allows only one wildcard character per property within a filter
+    # statement (see https://developer.crowdstrike.com/api-reference/falcon-query-language/);
+    # a leading *and* trailing wildcard on the same property (e.g. *'*ostgre*')
+    # is rejected with HTTP 400. Regular string filters are case-insensitive
+    # by default (only the bracketed exact-match form is case-sensitive), so
+    # a single trailing wildcard on the full "postgres" token is sufficient
+    # and matches PostgreSQL/postgresql/POSTGRESQL alike.
+    query_params = {"filter": "application_name:*'postgres*'"}
     app_ids = list(paginated_query(base_url, token, "/discover/queries/applications/v1", query_params, required_scope=scope))
     if not app_ids:
         return []
