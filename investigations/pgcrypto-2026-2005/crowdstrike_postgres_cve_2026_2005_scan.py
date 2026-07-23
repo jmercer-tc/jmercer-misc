@@ -55,7 +55,17 @@ Region base URLs:
 
 Usage
 -----
-    python3 crowdstrike_postgres_cve_2026_2005_scan.py [--out report.csv]
+    python3 crowdstrike_postgres_cve_2026_2005_scan.py [--out report.csv] [--cid CID]
+
+--cid CID   Optional. The CrowdStrike Customer ID (CID) you expect these
+            credentials to be scoped to (find it in the Falcon console under
+            Support and resources > API clients and keys, listed next to the
+            client, or under Host setup and management > Deployment). If
+            given, the script reads the 'cid' claim out of the OAuth2 access
+            token and refuses to proceed if it doesn't match — this catches
+            the case where credentials from the wrong CID (e.g. the parent
+            CID in a Flight Control setup) get used by mistake, and prints
+            what to create instead.
 
 Output
 ------
@@ -66,7 +76,10 @@ Prints a summary table to stdout and writes a CSV report with columns:
 `status` is one of: VULNERABLE, PATCHED, UNKNOWN_VERSION, SPOTLIGHT_MATCH
 """
 
+import base64
+import binascii
 import csv
+import json
 import os
 import re
 import sys
@@ -85,6 +98,12 @@ PATCHED_MINOR_BY_MAJOR = {
 }
 
 CVE_ID = "CVE-2026-2005"
+
+REQUIRED_SCOPES_TEXT = (
+    "  - Hosts: READ\n"
+    "  - Discover (Assets): READ         (may show simply as \"Assets\")\n"
+    "  - Spotlight Vulnerabilities: READ (may show simply as \"Vulnerabilities\")"
+)
 
 
 class FalconAuthError(Exception):
@@ -131,6 +150,35 @@ def get_token(base_url: str, client_id: str, client_secret: str) -> str:
     )
     _check_response(resp, "requesting an OAuth2 token")
     return resp.json()["access_token"]
+
+
+def _decode_jwt_payload(token: str) -> dict:
+    """Best-effort decode of a JWT's payload WITHOUT verifying its signature.
+    This is only ever used to read the 'cid' claim back out of our own,
+    already-authenticated access token for a sanity check against --cid — it
+    is never used to trust or authorize anything."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("access token is not in JWT format")
+    payload_b64 = parts[1]
+    padding = "=" * (-len(payload_b64) % 4)
+    payload_bytes = base64.urlsafe_b64decode(payload_b64 + padding)
+    return json.loads(payload_bytes)
+
+
+def resolve_cid_from_token(token: str):
+    """Return the CID the given access token is scoped to, or None if it
+    can't be determined (token isn't a JWT, or carries no recognizable CID
+    claim)."""
+    try:
+        payload = _decode_jwt_payload(token)
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
+        return None
+    for key in ("cid", "ccid", "customer_id"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return None
 
 
 def paginated_query(base_url, token, query_path, params=None, limit=500, required_scope=None):
@@ -279,6 +327,13 @@ def classify(row):
 def main():
     parser = argparse.ArgumentParser(description="Inventory Postgres hosts in CrowdStrike Falcon and flag CVE-2026-2005 exposure.")
     parser.add_argument("--out", default="cve_2026_2005_postgres_report.csv", help="Output CSV path")
+    parser.add_argument(
+        "--cid",
+        default=None,
+        help="Expected CrowdStrike Customer ID (CID) these credentials should belong "
+             "to. If given, the script verifies this before querying and refuses to "
+             "proceed on a mismatch, printing what needs to be created instead.",
+    )
     args = parser.parse_args()
 
     client_id = os.environ.get("FALCON_CLIENT_ID")
@@ -291,7 +346,38 @@ def main():
     try:
         print(f"[info] Authenticating against {base_url} ...")
         token = get_token(base_url, client_id, client_secret)
+    except FalconAuthError as e:
+        sys.exit(f"[error] {e}")
+    except requests.HTTPError as e:
+        sys.exit(f"[error] Falcon API request failed: {e}")
+    except requests.RequestException as e:
+        sys.exit(f"[error] Could not reach the Falcon API at {base_url}: {e}")
 
+    resolved_cid = resolve_cid_from_token(token)
+    if args.cid:
+        if resolved_cid is None:
+            print(
+                f"[warn] Could not determine which CID these credentials belong to "
+                f"(no readable 'cid' claim on the access token), so --cid {args.cid} "
+                f"could not be verified. Proceeding anyway.",
+                file=sys.stderr,
+            )
+        elif resolved_cid.lower() != args.cid.lower():
+            sys.exit(
+                f"[error] These credentials belong to CID '{resolved_cid}', not the "
+                f"requested CID '{args.cid}'.\n"
+                f"Create a new API client directly under CID '{args.cid}' in the "
+                f"Falcon console (Support and resources > API clients and keys) with "
+                f"these read-only scopes:\n{REQUIRED_SCOPES_TEXT}\n"
+                f"Then re-run this script with FALCON_CLIENT_ID/FALCON_CLIENT_SECRET "
+                f"sourced from that new client (e.g. via ./falcon.rc)."
+            )
+        else:
+            print(f"[info] Confirmed credentials belong to requested CID '{args.cid}'.")
+    elif resolved_cid:
+        print(f"[info] These credentials are scoped to CID '{resolved_cid}'.")
+
+    try:
         print("[info] Querying Falcon Discover for installed PostgreSQL applications ...")
         rows = discover_postgres_applications(base_url, token)
     except FalconAuthError as e:
