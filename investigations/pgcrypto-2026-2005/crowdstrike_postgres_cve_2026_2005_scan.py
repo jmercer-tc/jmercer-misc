@@ -260,38 +260,34 @@ def discover_postgres_applications(base_url, token):
     if not apps:
         return []
 
-    # Resolve host_id -> hostname/os via Discover Hosts entities. Falcon's
-    # docs/SDKs aren't fully consistent about whether the applications entity
-    # exposes this as "host_id" or as the agent ID field "aid" -- try both
-    # rather than assuming, and warn (with a --debug hint) if neither is
-    # present so this doesn't silently degrade into all-UNKNOWN rows again.
-    def _app_host_id(app):
-        return app.get("host_id") or app.get("aid")
-
-    host_ids = sorted({_app_host_id(a) for a in apps if _app_host_id(a)})
-    hosts_by_id = {}
-    if host_ids:
-        hosts = batch_get_entities(base_url, token, "/discover/entities/hosts/v1", host_ids, required_scope="Hosts: READ / Discover (Assets): READ")
-        if DEBUG and hosts:
-            log(f"[debug] sample /discover/entities/hosts/v1 entity:\n{json.dumps(hosts[0], indent=2, default=str)}")
-        hosts_by_id = {h.get("id"): h for h in hosts}
-    else:
-        log("[warn] Could not find a host_id/aid field on any matched application entity; "
-            "hostname/host_id will show as UNKNOWN below. Re-run with --debug to see the "
-            "raw entity JSON and figure out the right field name.")
-
+    # Host info is nested directly inside each application entity under
+    # "host" (confirmed via --debug against a real Falcon tenant on
+    # 2026-07-23) -- it is NOT a flat "host_id"/"aid" field on the app
+    # itself, and there's no need for a separate /discover/entities/hosts/v1
+    # lookup at all. The nested object includes "hostname", "os_version",
+    # "id" (Discover's own compound host-entity ID), and "aid" -- the Falcon
+    # Agent ID, which is the canonical host identifier used throughout the
+    # rest of Falcon (Host Management, Spotlight, etc.) and is what you'd
+    # actually search/pivot on in the console -- so both are reported.
+    missing_host_info = 0
     rows = []
     for app in apps:
-        host_id = _app_host_id(app)
-        host = hosts_by_id.get(host_id, {})
+        host = app.get("host") or {}
+        if not host:
+            missing_host_info += 1
         rows.append({
             "hostname": host.get("hostname", "UNKNOWN"),
-            "host_id": host_id or "UNKNOWN",
+            "host_id": host.get("id", "UNKNOWN"),
+            "aid": host.get("aid", "UNKNOWN"),
             "os_version": host.get("os_version", ""),
             "application_name": app.get("name", ""),
             "application_version": app.get("version", ""),
             "source": "discover_applications",
         })
+    if missing_host_info:
+        log(f"[warn] {missing_host_info} of {len(apps)} matched application entities had no "
+            "nested \"host\" object; their hostname/host_id will show as UNKNOWN. Re-run with "
+            "--debug to inspect a raw entity.")
     return rows
 
 
@@ -323,6 +319,11 @@ def spotlight_cve_matches(base_url, token):
         rows.append({
             "hostname": host.get("hostname", "UNKNOWN"),
             "host_id": host.get("host_id", "UNKNOWN"),
+            # Spotlight's vulnerability entity doesn't necessarily label this
+            # field "aid" the same way Discover does -- fall back to
+            # host_info.host_id (which CrowdStrike's Spotlight docs describe
+            # as the AID) if a distinct "aid" field isn't present.
+            "aid": host.get("aid", host.get("host_id", "UNKNOWN")),
             "os_version": host.get("os_version", ""),
             "application_name": app.get("product_name_version", app.get("product_name", "")),
             "application_version": app.get("version", ""),
@@ -459,7 +460,7 @@ def main():
     all_rows = [classify(r) for r in rows + spotlight_rows]
 
     fieldnames = [
-        "hostname", "host_id", "os_version", "application_name", "application_version",
+        "hostname", "host_id", "aid", "os_version", "application_name", "application_version",
         "parsed_major", "parsed_minor", "patched_minor_for_major", "status", "source",
     ]
     if args.out == "-":
@@ -485,12 +486,12 @@ def main():
     if vulnerable:
         log("Vulnerable / matched hosts:")
         for r in vulnerable:
-            log(f"  - {r['hostname']} ({r['host_id']}): {r['application_name']} {r['application_version']} [{r['status']}]")
+            log(f"  - {r['hostname']} (aid={r['aid']}): {r['application_name']} {r['application_version']} [{r['status']}]")
 
     if unknown:
         log("\nHosts with unparseable version strings (check manually):")
         for r in unknown:
-            log(f"  - {r['hostname']} ({r['host_id']}): {r['application_name']} {r['application_version']!r}")
+            log(f"  - {r['hostname']} (aid={r['aid']}): {r['application_name']} {r['application_version']!r}")
 
 
 if __name__ == "__main__":
