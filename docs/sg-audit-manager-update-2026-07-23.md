@@ -16,7 +16,7 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | SECO-3669 | Story | Remediation (parent for tenant sub-tasks below) | Backlog | |
 | SECO-3654 | Sub-task | VRRP sec-policy | Backlog | Linked SHEP2-812 |
 | SECO-3657 | Sub-task | Wavelo GSLB virtual A10 | Backlog | |
-| SECO-3667 | Sub-task | {qa,prod}_dish_db_replica cleanup | Backlog | Scope likely needs expanding to cover `dish_db_dwh` variants (see §2) |
+| SECO-3667 | Sub-task | {qa,prod}_dish_db_replica cleanup | Backlog | Scope likely needs expanding to cover `dish_db_dwh` variants (see Section 2, "Remaining non-compliant sg-rules — overview," below) |
 | SECO-3673 | Sub-task | dev_hoofprints default-SG cleanup | Backlog | Correctly scoped: 203 of 567 non-compliant rules are default-SG |
 | SECO-3674 | Sub-task | prod_bareos default-SG | **Done** | Confirmed via fresh recount — 0 remaining default-SG rows |
 | SECO-3675 | Sub-task | trs_ry_prod remediation | Backlog | |
@@ -25,7 +25,7 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | SECO-3678 | Sub-task | Consul policies (111 rules) | Backlog | **Rejected**, same reason/date |
 | SECO-3680 | Sub-task | tch-ssh-tunnel / DMNS-554 | Backlog | |
 | SECO-3681 | Sub-task | jmcdonald-dev decommission | Backlog | Blocked on Joe McDonald (CR-43285, CR-43375) |
-| SECO-3683 | Sub-task | Remove 216.40.38.249/32, non-FIP VMs | Backlog, **on hold** | Premise was wrong — needs revision (see §3) |
+| SECO-3683 | Sub-task | Remove 216.40.38.249/32, non-FIP VMs | Backlog, **on hold** | Premise was wrong — needs revision (see Section 3, "Challenges quantifying, organizing, and prioritizing remediation," below) |
 | SECO-3684 | Sub-task | Remove 216.40.38.249/32, kafkapublic | Backlog, **on hold** | Same |
 | SECO-3643 | Related | allowed_address_pairs monitoring proposal | **Ready for Development** | Only ticket actively queued |
 
@@ -43,7 +43,7 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | CR-43375 | Peer review | — | Migrate timeoff bot off jmcdonald-dev (depends on CR-43285) |
 | DMNS-554 | Backlog | — | Allowed-address-pairs security issue (tch-ssh-tunnel) |
 
-The three rejected tickets (SECO-3676/3677/3678) have had **no activity since the 2026-07-15 rejection** — they need to be re-routed to tenant-owning teams rather than Shepherd engineering (see §3).
+The three rejected tickets (SECO-3676/3677/3678) have had **no activity since the 2026-07-15 rejection** — they need to be re-routed to tenant-owning teams rather than Shepherd engineering (see Section 3, "Challenges quantifying, organizing, and prioritizing remediation," below).
 
 ---
 
@@ -96,11 +96,11 @@ This is the crux worth deciding together. Four different, defensible ways to sor
 
 The tension in one sentence: **the rules that are riskiest (Tier 1/2) are a small fraction of the total, while the rules that would move the compliance percentage the most (Tier 3, e.g. prod_mse) are already the lowest-risk ones.** Optimizing for either one alone tells a different story to leadership — "we closed our worst exposure" vs. "we cut non-compliance by X%."
 
-The phased plan in §3 is one attempt to sequence both (urgent-small first, then structural, then volume) rather than picking one lens exclusively — but that sequencing hasn't been signed off yet. Also unresolved: **prod_ops_services** is simultaneously your largest Tier-1 tenant (93 live-exposed rules) *and* part of the c18e/Nomad family whose owner-outreach is on hold pending (a) above — so "fix the riskiest thing first" and "outreach for that family is deferred" are currently in direct conflict for this one tenant.
+The phased plan described above in Section 3 ("Challenges quantifying, organizing, and prioritizing remediation") is one attempt to sequence both (urgent-small first, then structural, then volume) rather than picking one lens exclusively — but that sequencing hasn't been signed off yet. Also unresolved: **prod_ops_services** is simultaneously your largest Tier-1 tenant (93 live-exposed rules) *and* part of the c18e/Nomad family whose owner-outreach is on hold pending (a) above — so "fix the riskiest thing first" and "outreach for that family is deferred" are currently in direct conflict for this one tenant.
 
 ---
 
 ## Bottom line for the meeting
 - Investigation is mature (332 tenants / ~20,000 rules analyzed, tiered by risk, root-caused to a `default`-SG structural pattern); remediation execution has barely started (1 of 19 SECO sub-tasks done).
 - ~41% of known non-compliance is currently blocked on a rejected ticket path and needs re-routing to tenant-owning teams — a resourcing/outreach ask, not an engineering one.
-- The main decision needed: adopt a sequencing philosophy (risk-first, effort-first, or volume-first) so tickets can start moving instead of stacking up in Backlog. Recommendation on the table is the 4-phase plan in §3, but the exposure-vs-volume tension in §4 is the part that most needs a management call.
+- The main decision needed: adopt a sequencing philosophy (risk-first, effort-first, or volume-first) so tickets can start moving instead of stacking up in Backlog. Recommendation on the table is the 4-phase plan from Section 3 ("Challenges quantifying, organizing, and prioritizing remediation"), but the exposure-vs-volume tension discussed in Section 4 ("Open question for this meeting: what determines priority order?") is the part that most needs a management call.
