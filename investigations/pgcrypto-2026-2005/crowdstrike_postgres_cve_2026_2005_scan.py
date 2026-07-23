@@ -28,10 +28,17 @@ Auth / Scopes
 Create an API client in the Falcon console under:
     Support and resources > API clients and keys
 
-Required scopes (read-only):
+Required scopes (read-only). Depending on console version these may be
+labeled either the long form or the short form shown in parentheses:
     - Hosts: READ
-    - Discover (Assets): READ
-    - Spotlight Vulnerabilities: READ
+    - Discover (Assets): READ            (may show simply as "Assets")
+    - Spotlight Vulnerabilities: READ    (may show simply as "Vulnerabilities")
+
+These scopes are gated by module licensing and may not appear at all when
+creating a client under a parent CID in a Flight Control setup — if so, try
+creating the client directly under the specific child CID instead. A client
+created on a child CID is scoped to that CID's own data automatically; no
+member_cid parameter is needed on any of the API calls below.
 
 Provide credentials via environment variables (never hardcode them). A copy
 of the RTR scripts' falcon.rc lives alongside this file for convenience — it
