@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# falconrc — source this file to load CrowdStrike Falcon API credentials
+#            into your shell environment.
+#
+# Usage:
+#   source crowdstrike/falconrc
+#   . crowdstrike/falconrc
+#
+# Credentials are prompted interactively and never written to disk.
+# The secret is entered silently (no echo).
+
+_falcon_load_creds() {
+    # Exit if both vars are already set
+    if [[ -n "${FALCON_CLIENT_ID:-}" && -n "${FALCON_CLIENT_SECRET:-}" ]]; then
+        echo "# FALCON_CLIENT_ID is already set."
+        echo "# FALCON_CLIENT_SECRET is already set."
+        echo "# Nothing to do — exiting."
+        return 0
+    fi
+
+    echo "CrowdStrike Falcon API — enter credentials"
+    echo "-------------------------------------------"
+
+    # Client ID (visible input)
+    read -r -p "  Client ID     : " FALCON_CLIENT_ID
+    if [[ -z "$FALCON_CLIENT_ID" ]]; then
+        echo "Aborted: no Client ID provided." >&2
+        return 1
+    fi
+
+    # Client Secret (silent input)
+    read -r -s -p "  Client Secret : " FALCON_CLIENT_SECRET
+    echo   # newline after silent input
+
+    if [[ -z "$FALCON_CLIENT_SECRET" ]]; then
+        echo "Aborted: no Client Secret provided." >&2
+        unset FALCON_CLIENT_ID
+        return 1
+    fi
+
+    export FALCON_CLIENT_ID
+    export FALCON_CLIENT_SECRET
+
+    echo "  Falcon credentials exported to environment."
+}
+
+_falcon_load_creds
+unset -f _falcon_load_creds

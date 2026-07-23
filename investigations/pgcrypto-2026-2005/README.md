@@ -33,6 +33,9 @@ reachable with attacker-controlled ciphertext.
   hosts with PostgreSQL installed and their reported versions, cross-checks
   Falcon Spotlight for any existing CVE-2026-2005 matches, and flags anything
   below the patched thresholds above. Writes a CSV report.
+- `falcon.rc` — copy of the RTR scripts' credential helper. Prompts
+  interactively for the Falcon API client ID/secret and exports them into the
+  shell; nothing is written to disk.
 
 This is an **inventory/detection tool only** — it does not contain, use, or
 reference exploit code, and it makes no changes to any host.
@@ -40,7 +43,7 @@ reference exploit code, and it makes no changes to any host.
 ## Running it
 
 ```bash
-source ~/wip/secops-scripts/crowdstrike/rtr/falcon.rc   # prompts for API creds, exports FALCON_CLIENT_ID/SECRET
+source ./falcon.rc   # prompts for API creds, exports FALCON_CLIENT_ID/SECRET
 python3 crowdstrike_postgres_cve_2026_2005_scan.py --out report.csv
 ```
 

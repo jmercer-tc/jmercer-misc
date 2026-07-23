@@ -33,11 +33,11 @@ Required scopes (read-only):
     - Discover (Assets): READ
     - Spotlight Vulnerabilities: READ
 
-Provide credentials via environment variables (never hardcode them). This
-reuses the same interactive credential prompt as the RTR scripts, so nothing
-is ever written to disk:
+Provide credentials via environment variables (never hardcode them). A copy
+of the RTR scripts' falcon.rc lives alongside this file for convenience — it
+prompts interactively and exports the vars; nothing is ever written to disk:
 
-    source ~/wip/secops-scripts/crowdstrike/rtr/falcon.rc
+    source ./falcon.rc
     export FALCON_BASE_URL="https://api.crowdstrike.com"   # see region table below
 
 Region base URLs:
