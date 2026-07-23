@@ -155,8 +155,14 @@ def get_token(base_url: str, client_id: str, client_secret: str) -> str:
     return resp.json()["access_token"]
 
 
-def paginated_query(base_url, token, query_path, params=None, limit=500, required_scope=None):
-    """Yield IDs from a Falcon 'queries' endpoint, handling offset pagination."""
+def paginated_query(base_url, token, query_path, params=None, limit=100, required_scope=None):
+    """Yield IDs from a Falcon 'queries' endpoint, handling offset pagination.
+
+    Default limit is 100: several Falcon "queries" endpoints (confirmed for
+    Discover applications via HTTP 400: "500 is an invalid limit, must be
+    between 1 and 100") cap out well below the naive assumption of 500, and
+    100 is safely within range for every endpoint this script currently uses.
+    """
     params = dict(params or {})
     params["limit"] = limit
     offset = 0
@@ -202,15 +208,23 @@ def discover_postgres_applications(base_url, token):
     PostgreSQL installed, and pull the reported version string.
     """
     scope = "Discover (Assets): READ"
-    # FQL allows only one wildcard character per property within a filter
-    # statement (see https://developer.crowdstrike.com/api-reference/falcon-query-language/);
+    # The Discover applications query endpoint doesn't accept "application_name"
+    # as a filter property (confirmed via HTTP 400: "property application_name
+    # not allowed") -- the entity's own field is just "name" (see
+    # /discover/entities/applications/v1 below, and the FalconPy Discover
+    # service collection docs). FQL also allows only one wildcard character per
+    # property within a filter statement (see
+    # https://developer.crowdstrike.com/api-reference/falcon-query-language/);
     # a leading *and* trailing wildcard on the same property (e.g. *'*ostgre*')
     # is rejected with HTTP 400. Regular string filters are case-insensitive
     # by default (only the bracketed exact-match form is case-sensitive), so
     # a single trailing wildcard on the full "postgres" token is sufficient
     # and matches PostgreSQL/postgresql/POSTGRESQL alike.
-    query_params = {"filter": "application_name:*'postgres*'"}
-    app_ids = list(paginated_query(base_url, token, "/discover/queries/applications/v1", query_params, required_scope=scope))
+    query_params = {"filter": "name:*'postgres*'"}
+    # This endpoint's max "limit" is 100 (HTTP 400: "500 is an invalid limit,
+    # must be between 1 and 100"), well under paginated_query()'s old default
+    # of 500.
+    app_ids = list(paginated_query(base_url, token, "/discover/queries/applications/v1", query_params, limit=100, required_scope=scope))
     if not app_ids:
         return []
 
