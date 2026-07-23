@@ -67,6 +67,7 @@ Prints a summary table to stdout and writes a CSV report with columns:
 """
 
 import csv
+import json
 import os
 import re
 import sys
@@ -92,6 +93,13 @@ CVE_ID = "CVE-2026-2005"
 # happen to contain "postgresql" (postgresql-contrib, postgresql-client,
 # libpq5, pgadmin4, etc.) which we don't want in the report.
 PG_SERVER_PACKAGE_NAME_RE = re.compile(r"^postgresql(-[0-9]*)?$", re.IGNORECASE)
+
+# Set from --debug in main(). When true, dump a sample raw Falcon API entity
+# to stderr the first time each entity type is fetched -- useful for
+# confirming actual field names (the Falcon API docs and SDKs aren't always
+# consistent/current, so when a field we expect turns out to be missing,
+# looking at the real JSON beats guessing again).
+DEBUG = False
 
 
 def log(*args, **kwargs):
@@ -240,6 +248,8 @@ def discover_postgres_applications(base_url, token):
         return []
 
     apps = batch_get_entities(base_url, token, "/discover/entities/applications/v1", app_ids, required_scope=scope)
+    if DEBUG and apps:
+        log(f"[debug] sample /discover/entities/applications/v1 entity:\n{json.dumps(apps[0], indent=2, default=str)}")
 
     # Narrow to just the PostgreSQL server package itself: "postgresql" or
     # "postgresql-<digits>" (e.g. postgresql-14, postgresql-16). This
@@ -250,19 +260,33 @@ def discover_postgres_applications(base_url, token):
     if not apps:
         return []
 
-    # Resolve host_id -> hostname/os via Discover Hosts entities
-    host_ids = sorted({a.get("host_id") for a in apps if a.get("host_id")})
+    # Resolve host_id -> hostname/os via Discover Hosts entities. Falcon's
+    # docs/SDKs aren't fully consistent about whether the applications entity
+    # exposes this as "host_id" or as the agent ID field "aid" -- try both
+    # rather than assuming, and warn (with a --debug hint) if neither is
+    # present so this doesn't silently degrade into all-UNKNOWN rows again.
+    def _app_host_id(app):
+        return app.get("host_id") or app.get("aid")
+
+    host_ids = sorted({_app_host_id(a) for a in apps if _app_host_id(a)})
     hosts_by_id = {}
     if host_ids:
         hosts = batch_get_entities(base_url, token, "/discover/entities/hosts/v1", host_ids, required_scope="Hosts: READ / Discover (Assets): READ")
+        if DEBUG and hosts:
+            log(f"[debug] sample /discover/entities/hosts/v1 entity:\n{json.dumps(hosts[0], indent=2, default=str)}")
         hosts_by_id = {h.get("id"): h for h in hosts}
+    else:
+        log("[warn] Could not find a host_id/aid field on any matched application entity; "
+            "hostname/host_id will show as UNKNOWN below. Re-run with --debug to see the "
+            "raw entity JSON and figure out the right field name.")
 
     rows = []
     for app in apps:
-        host = hosts_by_id.get(app.get("host_id"), {})
+        host_id = _app_host_id(app)
+        host = hosts_by_id.get(host_id, {})
         rows.append({
             "hostname": host.get("hostname", "UNKNOWN"),
-            "host_id": app.get("host_id", "UNKNOWN"),
+            "host_id": host_id or "UNKNOWN",
             "os_version": host.get("os_version", ""),
             "application_name": app.get("name", ""),
             "application_version": app.get("version", ""),
@@ -380,6 +404,13 @@ def main():
              "file (all [info]/[summary]/[warn] messages go to stderr either way, "
              "so stdout stays clean for piping).",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print a sample raw Falcon API entity (applications, hosts) to "
+             "stderr for troubleshooting, e.g. when expected fields come back "
+             "empty/UNKNOWN.",
+    )
 
     if len(sys.argv) == 1:
         # Bare invocation, no flags at all — show usage/help instead of
@@ -388,6 +419,9 @@ def main():
         sys.exit(0)
 
     args = parser.parse_args()
+
+    global DEBUG
+    DEBUG = args.debug
 
     client_id = os.environ.get("FALCON_CLIENT_ID")
     client_secret = os.environ.get("FALCON_CLIENT_SECRET")
