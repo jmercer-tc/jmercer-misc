@@ -6,6 +6,32 @@ Prepared for Jim Mercer. Based on an initial sample of ~100 recent inbox threads
 
 **Naming convention:** labels use a `category-detail` prefix (`hr-`, `helpdesk-`, `secops-`, etc.) so they sort together alphabetically in an IMAP folder list. This applies both to new labels and to a set of suggested renames for your existing ones, below.
 
+## Status update — re-check as of July 21, 2026
+
+I went back through your mailbox to see how everything below actually landed. Short version: almost all of the new labels were created and are working well, but there's a real regression worth fixing soon, plus a handful of smaller gaps.
+
+**🚨 Several filters appear to have stopped applying labels around July 16–17** — this is the most important thing in this update. Four separate filters that were working fine now show a clean break right around the same couple of days, which points to something changing that week rather than four unrelated vendor changes:
+
+- `secops-radware`: labeled every Radware message through July 16, then nothing from July 17 onward is labeled (confirmed multiple `cwaf.status@radwarecloud.com` / `system@radwarecloud.com` messages through today, July 21, sitting bare in the inbox).
+- `secops-alienvault`: same pattern — labeled through July 15–16, then every `noreply@alienvault.com` "AlienVault Alarm" message from July 17–21 is unlabeled.
+- `secops-maint`: was correctly catching domain-registry maintenance notices from `identity.digital` and `systems@email.nominet.uk`, but the most recent message from each (nominet, July 17; identity.digital, July 21) is unlabeled while everything before it is labeled.
+- `secops-nessus`: separately, this label had been mis-catching daily `root@nyc1.scan.prod.tucows.net` CRON-APT server reports (likely an accidental broad match on "scan" in the sending subdomain) from July 12–16 — that mislabeling also stopped after July 16. Worth noting genuine `nessus@tucows.com` "Nessus Scan Results" mail doesn't appear to be labeled at all in the messages I could sample, so it's worth double-checking that filter's query separately.
+
+I can't see the underlying filter definitions through this connector — only which labels end up on which messages — so I can't tell you exactly what changed. Given the timing, it's worth checking **Settings → Filters and Blocked Addresses** directly; if you touched any of the label renames from this doc around then (e.g. `carta`→something, `info`/`concerns`), it's possible an edit or a Gmail quirk during a rename affected other filters too. Re-saving the affected filters (open each, re-select the label, save again) is usually enough to fix this kind of drift.
+
+**Naming divergences (cosmetic only, no action needed unless you want to tidy up):**
+
+- `carta` → renamed to `hr-stocks`, not `hr-carta` as I'd suggested. Works fine either way; content confirmed as Carta vesting mail (dormant since Aug 2023 — no bug, just no recent vesting activity).
+- Exact Hosting invoices → labeled `misc-invoices`, not `billing-exacthosting`.
+- Tempo reminders → labeled `hr-tempo`, not `tools-tempo`.
+- `hacker1` → still `secops-hacker1` (truncated vendor name), not renamed to `secops-hackerone`. Filter itself is fine, catching good HackerOne volume.
+
+**Confirmed working well:** `helpdesk-approvals`, `helpdesk-resolved`, `newsletters-marketing`, `newsletters-training`, `secops-github-monitoring`, `secops-phishnotify`, `secops-crowdstrike`, `hr-hibob`, `meetings-notes`, `lists-it-isac` were all created and are actively catching mail, most with activity as recent as July 20–21. One good-news side effect: the `newsletters-training`/`newsletters-marketing` overlap I flagged before (marketing mail getting double-tagged with the training label) seems to have self-corrected — recent mail from each bucket now gets only its own label.
+
+**Still not created:** `confluence-digest` — confirmed there's still unlabeled `confluence@wiki-tucows.atlassian.net` digest mail sitting in the inbox (roughly weekly, March through July). Recipe below.
+
+**New gaps found in this pass** — see the added recipes below for: a Perkopolis sending-domain change that's slipping past the marketing filter, a Fellow.app meeting-notes sender with no coverage, two helpdesk notice types that behave like `helpdesk-resolved` but aren't matched by it, and two new recurring senders (daily CRON-APT server reports, and PCI DSS scan notices from SecureTrust) worth their own filters.
+
 ## Label map: existing, renamed, and new
 
 **Existing labels — recommend renaming for consistent sort order**
@@ -63,6 +89,8 @@ Note: the Gmail connector I have can create labels but can't delete or rename th
 
 `nessus`, `recorded-future`, `secops-radware`, `github`, `jira`, and `hacker1` are catching real volume — tens of messages each when you look past the inbox at everything they've already sorted. These filters are doing their job; the renames suggested above are purely for sort order, not because anything's broken.
 
+**Update, July 21:** this has partly changed — see the "Status update" section above. `secops-radware` stopped labeling new mail around July 17, and genuine Nessus scan-result mail (as opposed to the CRON-APT mail that was incorrectly landing under `secops-nessus`) doesn't look like it's being labeled at all in the current sample. Worth a check in Settings → Filters.
+
 ## Priorities, revised after the larger sample
 
 The bigger review changed the priority order from my first pass:
@@ -78,14 +106,24 @@ The bigger review changed the priority order from my first pass:
 
 ✅ `helpdesk-approvals` is set up and working correctly (label applied, inbox visibility preserved as intended).
 
-✅ `helpdesk-resolved` is set up and working correctly.
+✅ `helpdesk-resolved` is set up and working correctly, but currently only matches subject "Ticket Resolved." Two other notice types behave the same way (FYI-only, nothing to action) but aren't covered:
+
+- Subject `Ticket Closed` — 10 unlabeled threads found, May–July 2026.
+- Subject `Ticket Approved/Rejected` — 11 unlabeled threads found, April–July 2026.
+
+Recommend extending the existing filter's subject match, e.g.:
+```
+subject:("Ticket Resolved" OR "Ticket Closed" OR "Ticket Approved/Rejected")
+```
 
 **2. Newsletters / webinar marketing (second-highest priority — largest pure-noise bucket)**
 
 ```
-from:(customerservice@perkopolis.com OR update@grafana.com OR customereducation@docebo.com OR events@docebo.com OR contactus@docebo.com OR info@e.atlassian.com OR aws-marketing-email-replies@amazon.com OR noreply@meraki.com OR donotreply@notifications.visaacceptance.com OR experts@comms.levelblue.com)
+from:(customerservice@perkopolis.com OR customerservice@send.perkopolis.com OR update@grafana.com OR customereducation@docebo.com OR events@docebo.com OR contactus@docebo.com OR info@e.atlassian.com OR aws-marketing-email-replies@amazon.com OR noreply@meraki.com OR donotreply@notifications.visaacceptance.com OR experts@comms.levelblue.com)
 ```
 Action: Apply new label `newsletters-marketing`, Skip Inbox.
+
+**Update, July 21:** Perkopolis has started sending from a second address, `customerservice@send.perkopolis.com` (confirmed multiple unlabeled examples, e.g. "Save 12% off..." July 20 and a BetterHelp promo July 13) — it's not caught by the original query above. Added it into the OR-list above; if your live filter already exists, just edit it to add `OR from:customerservice@send.perkopolis.com`.
 
 ✅ `newsletters-training` (Infosec Institute) is set up and working correctly.
 
@@ -114,6 +152,11 @@ from:gemini-notes@google.com
 ```
 Action: Apply new label `meetings-notes`, Skip Inbox. One of these per standup/meeting — useful as reference, not something that needs inbox space.
 
+**Update, July 21:** `no-reply@fellow.app` sends weekly digests, per-meeting notes, and pre-meeting briefs that are functionally the same thing as the Gemini notes above, but aren't covered by the current filter — confirmed several unlabeled examples per week, May–July. Recommend folding it into the same filter/label rather than creating a new one:
+```
+from:(gemini-notes@google.com OR no-reply@fellow.app)
+```
+
 **6. Billing / invoices**
 
 ```
@@ -135,6 +178,27 @@ Not spam, a real opt-in working group. Label for easy reference but leave it in 
 from:it-isac.org
 ```
 Action: Apply new label `lists-it-isac`. Skip inbox optional — your call.
+
+**9. Confluence digest (proposed earlier, never created — still needed)**
+
+```
+from:confluence@wiki-tucows.atlassian.net
+```
+Action: Apply new label `confluence-digest`, Skip Inbox. Weekly-ish "Stay connected" / comment / daily-digest style notifications — confirmed still landing unlabeled in the inbox, March–July 2026.
+
+**10. New — daily server maintenance reports (found in this pass)**
+
+```
+from:root@nyc1.scan.prod.tucows.net
+```
+Action: Fold into the existing `secops-maint` label (same purpose as the other maintenance/domain-registry notices already there), Skip Inbox. This is a daily "CRON-APT completed on nyc1" report — confirmed arriving literally every day in the sampled window (July 12–21), FYI-only unless it flags a failure.
+
+**11. New — PCI DSS scan notifications (found in this pass)**
+
+```
+from:donotreply@securetrust.com
+```
+Action: Apply new label `secops-pcidss`. Recurring 2+ times a week (10+ instances July 6–20), covering three notice types: completed scan results, "External Scan Has Run – Attention Required," and upcoming-scan reminders. CCs several of your security team members already. Worth deciding inbox visibility based on whether the "Attention Required" variant needs a response — if so, keep in inbox; if it's always a false-positive/no-action situation, skip it.
 
 ## The AlienVault/LevelBlue fix (low priority, do whenever)
 
@@ -196,11 +260,11 @@ Perkopolis and Infosec Institute both had this pattern as of this review (resolv
 
 | Prefix | Used for |
 |---|---|
-| `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, misc/offboarding/domains/maint) |
-| `hr-` | HR/compensation systems (HiBob, Carta) |
-| `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`) |
+| `secops-` | Security vendor feeds, tickets, monitoring reports (AlienVault/LevelBlue, Nessus, Recorded Future, ICE-AWS, HackerOne, GitHub, Jira, PhishNotify, CrowdStrike, PCI DSS/SecureTrust, misc/offboarding/domains/maint incl. CRON-APT) |
+| `hr-` | HR/compensation systems (HiBob, Carta — currently labeled `hr-stocks`, Tempo — currently labeled `hr-tempo`) |
+| `helpdesk-` | Internal IT helpdesk ticket traffic, split by actionable (`-approvals`) vs. FYI (`-resolved`, covering Resolved/Closed/Approved-Rejected) |
 | `newsletters-` | Marketing/webinar/training mail with no action needed (`-marketing`, `-training`) |
-| `meetings-` | Auto-generated meeting artifacts (Gemini notes) |
+| `meetings-` | Auto-generated meeting artifacts (Gemini notes, Fellow.app notes) |
 | `billing-` | Vendor invoices |
 | `tools-` | Internal tool notifications (Tempo) |
 | `lists-` | Genuine opt-in mailing lists/working groups (IT-ISAC) |
