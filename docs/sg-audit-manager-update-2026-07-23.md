@@ -7,13 +7,25 @@
 
 Numbers pulled live from Jira today. Headline: **almost everything is still sitting in Backlog** — the investigation/analysis phase is far along, but very little has moved into active remediation yet.
 
+**Epic**
+
 | Ticket | Type | Summary | Status | Notes |
 |---|---|---|---|---|
 | SECO-3668 | Epic | OpenStack SG Audit & Remediation | Backlog | Parent epic |
+
+**Stories**
+
+| Ticket | Type | Summary | Status | Notes |
+|---|---|---|---|---|
 | SECO-3655 | Story | Investigation | Backlog | |
-| SECO-3656 | Sub-task | jmcdonald-dev publicly exposed VM | Backlog | Floating IP still assigned; CR-43285/CR-43375 in peer review |
-| SECO-3670 | Sub-task | Share raw data with Shepherd team | Backlog | Files need re-attaching (CSV/scripts refreshed) |
 | SECO-3669 | Story | Remediation (parent for tenant sub-tasks below) | Backlog | |
+
+**Sub-tasks**
+
+| Ticket | Type | Summary | Status | Notes |
+|---|---|---|---|---|
+| SECO-3656 | Sub-task | jmcdonald-dev publicly exposed VM | Backlog | Floating IP still assigned; CR-43285/CR-43375 in peer review |
+| SECO-3670 | Sub-task | Share raw data with Shepherd team | **Closed** | Files re-attached and closed 2026-07-23 |
 | SECO-3654 | Sub-task | VRRP sec-policy | Backlog | Linked SHEP2-812 |
 | SECO-3657 | Sub-task | Wavelo GSLB virtual A10 | Backlog | |
 | SECO-3667 | Sub-task | {qa,prod}_dish_db_replica cleanup | Backlog | Scope likely needs expanding to cover `dish_db_dwh` variants (see Section 2, "Remaining non-compliant sg-rules — overview," below) |
@@ -27,6 +39,11 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | SECO-3681 | Sub-task | jmcdonald-dev decommission | Backlog | Blocked on Joe McDonald (CR-43285, CR-43375) |
 | SECO-3683 | Sub-task | Remove 216.40.38.249/32, non-FIP VMs | Backlog, **on hold** | Premise was wrong — needs revision (see Section 3, "Challenges quantifying, organizing, and prioritizing remediation," below) |
 | SECO-3684 | Sub-task | Remove 216.40.38.249/32, kafkapublic | Backlog, **on hold** | Same |
+
+**Related**
+
+| Ticket | Type | Summary | Status | Notes |
+|---|---|---|---|---|
 | SECO-3643 | Related | allowed_address_pairs monitoring proposal | **Ready for Development** | Only ticket actively queued |
 
 **Downstream / linked tickets:**
