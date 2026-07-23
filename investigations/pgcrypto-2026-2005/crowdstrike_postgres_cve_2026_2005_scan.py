@@ -80,6 +80,41 @@ PATCHED_MINOR_BY_MAJOR = {
 CVE_ID = "CVE-2026-2005"
 
 
+class FalconAuthError(Exception):
+    """Credentials are missing, invalid, or lack a required API scope."""
+
+
+def _describe_falcon_error(resp) -> str:
+    """Pull the human-readable error message(s) out of a Falcon API error
+    body, if present. Falls back to the raw response text."""
+    try:
+        body = resp.json()
+        errors = body.get("errors") or []
+        if errors:
+            return "; ".join(e.get("message", str(e)) for e in errors)
+    except ValueError:
+        pass
+    return (resp.text or "").strip()[:300] or resp.reason
+
+
+def _check_response(resp, context: str, required_scope: str = None):
+    """Raise a clear, actionable FalconAuthError for auth/permission failures;
+    otherwise fall back to requests' normal HTTPError for other failures."""
+    if resp.status_code == 401:
+        raise FalconAuthError(
+            f"Authentication failed while {context} (HTTP 401): {_describe_falcon_error(resp)}. "
+            "Check that FALCON_CLIENT_ID / FALCON_CLIENT_SECRET are correct and that the API "
+            "client hasn't been disabled, deleted, or expired in the Falcon console, and that "
+            "FALCON_BASE_URL matches the cloud region the client was created in."
+        )
+    if resp.status_code == 403:
+        scope_hint = f" This endpoint requires the '{required_scope}' API scope — add it to the API client in Falcon under Support and resources > API clients and keys." if required_scope else ""
+        raise FalconAuthError(
+            f"Permission denied while {context} (HTTP 403): {_describe_falcon_error(resp)}.{scope_hint}"
+        )
+    resp.raise_for_status()
+
+
 def get_token(base_url: str, client_id: str, client_secret: str) -> str:
     resp = requests.post(
         f"{base_url}/oauth2/token",
@@ -87,11 +122,11 @@ def get_token(base_url: str, client_id: str, client_secret: str) -> str:
         headers={"Accept": "application/json"},
         timeout=30,
     )
-    resp.raise_for_status()
+    _check_response(resp, "requesting an OAuth2 token")
     return resp.json()["access_token"]
 
 
-def paginated_query(base_url, token, query_path, params=None, limit=500):
+def paginated_query(base_url, token, query_path, params=None, limit=500, required_scope=None):
     """Yield IDs from a Falcon 'queries' endpoint, handling offset pagination."""
     params = dict(params or {})
     params["limit"] = limit
@@ -104,7 +139,7 @@ def paginated_query(base_url, token, query_path, params=None, limit=500):
             params=params,
             timeout=30,
         )
-        resp.raise_for_status()
+        _check_response(resp, f"querying {query_path}", required_scope)
         body = resp.json()
         ids = body.get("resources", [])
         for _id in ids:
@@ -116,7 +151,7 @@ def paginated_query(base_url, token, query_path, params=None, limit=500):
             break
 
 
-def batch_get_entities(base_url, token, entities_path, ids, id_param="ids", batch_size=100):
+def batch_get_entities(base_url, token, entities_path, ids, id_param="ids", batch_size=100, required_scope=None):
     """GET entity details in batches of up to batch_size IDs."""
     results = []
     for i in range(0, len(ids), batch_size):
@@ -127,7 +162,7 @@ def batch_get_entities(base_url, token, entities_path, ids, id_param="ids", batc
             params={id_param: chunk},
             timeout=30,
         )
-        resp.raise_for_status()
+        _check_response(resp, f"fetching {entities_path}", required_scope)
         results.extend(resp.json().get("resources", []))
     return results
 
@@ -137,18 +172,19 @@ def discover_postgres_applications(base_url, token):
     Use Falcon Discover's Applications inventory to find hosts with
     PostgreSQL installed, and pull the reported version string.
     """
+    scope = "Discover (Assets): READ"
     query_params = {"filter": "application_name:*'*ostgre*'"}
-    app_ids = list(paginated_query(base_url, token, "/discover/queries/applications/v1", query_params))
+    app_ids = list(paginated_query(base_url, token, "/discover/queries/applications/v1", query_params, required_scope=scope))
     if not app_ids:
         return []
 
-    apps = batch_get_entities(base_url, token, "/discover/entities/applications/v1", app_ids)
+    apps = batch_get_entities(base_url, token, "/discover/entities/applications/v1", app_ids, required_scope=scope)
 
     # Resolve host_id -> hostname/os via Discover Hosts entities
     host_ids = sorted({a.get("host_id") for a in apps if a.get("host_id")})
     hosts_by_id = {}
     if host_ids:
-        hosts = batch_get_entities(base_url, token, "/discover/entities/hosts/v1", host_ids)
+        hosts = batch_get_entities(base_url, token, "/discover/entities/hosts/v1", host_ids, required_scope="Hosts: READ / Discover (Assets): READ")
         hosts_by_id = {h.get("id"): h for h in hosts}
 
     rows = []
@@ -172,17 +208,19 @@ def spotlight_cve_matches(base_url, token):
     hosts to this CVE. Depends on Spotlight's content coverage as of
     when you run this.
     """
+    scope = "Spotlight Vulnerabilities: READ"
     query_params = {"filter": f"cve.id:'{CVE_ID}'"}
     try:
-        vuln_ids = list(paginated_query(base_url, token, "/spotlight/queries/vulnerabilities/v1", query_params))
+        vuln_ids = list(paginated_query(base_url, token, "/spotlight/queries/vulnerabilities/v1", query_params, required_scope=scope))
+        if not vuln_ids:
+            return []
+        vulns = batch_get_entities(base_url, token, "/spotlight/entities/vulnerabilities/v2", vuln_ids, required_scope=scope)
+    except FalconAuthError as e:
+        print(f"[warn] {e}\n[warn] Skipping Spotlight cross-check; Discover-based results below are unaffected.", file=sys.stderr)
+        return []
     except requests.HTTPError as e:
         print(f"[warn] Spotlight query failed ({e}); skipping Spotlight cross-check.", file=sys.stderr)
         return []
-
-    if not vuln_ids:
-        return []
-
-    vulns = batch_get_entities(base_url, token, "/spotlight/entities/vulnerabilities/v2", vuln_ids)
 
     rows = []
     for v in vulns:
@@ -243,11 +281,19 @@ def main():
     if not client_id or not client_secret:
         sys.exit("Set FALCON_CLIENT_ID and FALCON_CLIENT_SECRET environment variables before running.")
 
-    print(f"[info] Authenticating against {base_url} ...")
-    token = get_token(base_url, client_id, client_secret)
+    try:
+        print(f"[info] Authenticating against {base_url} ...")
+        token = get_token(base_url, client_id, client_secret)
 
-    print("[info] Querying Falcon Discover for installed PostgreSQL applications ...")
-    rows = discover_postgres_applications(base_url, token)
+        print("[info] Querying Falcon Discover for installed PostgreSQL applications ...")
+        rows = discover_postgres_applications(base_url, token)
+    except FalconAuthError as e:
+        sys.exit(f"[error] {e}")
+    except requests.HTTPError as e:
+        sys.exit(f"[error] Falcon API request failed: {e}")
+    except requests.RequestException as e:
+        sys.exit(f"[error] Could not reach the Falcon API at {base_url}: {e}")
+
     print(f"[info] Found {len(rows)} PostgreSQL application instance(s) via Discover.")
 
     print(f"[info] Cross-checking Falcon Spotlight for direct {CVE_ID} matches ...")
