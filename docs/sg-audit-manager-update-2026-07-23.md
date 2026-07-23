@@ -39,6 +39,7 @@ Numbers pulled live from Jira today. Headline: **almost everything is still sitt
 | SECO-3681 | Sub-task | jmcdonald-dev decommission | Backlog | Blocked on Joe McDonald (CR-43285, CR-43375) |
 | SECO-3683 | Sub-task | Remove 216.40.38.249/32, non-FIP VMs | Backlog, **on hold** | Premise was wrong — needs revision (see Section 3, "Challenges quantifying, organizing, and prioritizing remediation," below) |
 | SECO-3684 | Sub-task | Remove 216.40.38.249/32, kafkapublic | Backlog, **on hold** | Same |
+| SECO-3698 | Sub-task | trs_monitoring — Puppet master + related exposure | Backlog | New 2026-07-23; owner not yet confirmed |
 
 **Related**
 
